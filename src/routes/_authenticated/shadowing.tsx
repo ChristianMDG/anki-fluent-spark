@@ -332,11 +332,12 @@ function ShadowingPage() {
                     <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
                   </button>
                   <button
+                    type="button"
                     onClick={(e) => deleteVideo(v, e)}
-                    className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 backdrop-blur text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    className="absolute top-1.5 right-1.5 p-1.5 rounded-md bg-black/80 backdrop-blur text-muted-foreground hover:text-red-400 hover:bg-red-500/20 opacity-70 md:opacity-0 md:group-hover:opacity-100 transition z-10"
                     aria-label="Delete video"
                   >
-                    <X size={12} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               ))}
