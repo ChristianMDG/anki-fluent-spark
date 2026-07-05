@@ -73,7 +73,7 @@ export function VocabCard({ card, compact = false, onDelete }: { card: CardRow; 
 
         {card.french && (
           <section>
-            <p className="label-mono mb-1">Français</p>
+            <p className="label-mono mb-1">French</p>
             <p className="text-[color:var(--color-gold)]">{card.french}</p>
           </section>
         )}
