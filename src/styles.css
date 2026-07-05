@@ -108,6 +108,10 @@
     box-shadow:
       0 20px 60px -20px rgba(0, 0, 0, 0.6),
       inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition:
+      border-color 200ms ease,
+      transform 200ms ease,
+      box-shadow 200ms ease;
   }
 
   .glass-panel-soft {
@@ -115,6 +119,10 @@
     backdrop-filter: blur(12px) saturate(130%);
     border: 1px solid rgba(200, 60, 40, 0.2);
     border-radius: 14px;
+    transition:
+      border-color 200ms ease,
+      transform 200ms ease,
+      background 200ms ease;
   }
 
   .label-mono {
