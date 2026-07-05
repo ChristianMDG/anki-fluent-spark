@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
-import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus } from "lucide-react";
+import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2 } from "lucide-react";
+import { confirmDialog } from "@/components/ConfirmDialog";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
@@ -147,7 +148,13 @@ function ShadowingPage() {
 
   async function deleteVideo(v: VideoRow, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm("Delete this video and its notes?")) return;
+    e.preventDefault();
+    const ok = await confirmDialog({
+      title: "Delete this video?",
+      description: `"${v.title || "Untitled"}" and all its notes will be permanently removed.`,
+      confirmLabel: "Delete video",
+    });
+    if (!ok) return;
     if (v.source_type === "upload" && v.storage_path) {
       await supabase.storage.from("shadowing-videos").remove([v.storage_path]);
     }
@@ -325,11 +332,12 @@ function ShadowingPage() {
                     <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
                   </button>
                   <button
+                    type="button"
                     onClick={(e) => deleteVideo(v, e)}
-                    className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 backdrop-blur text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    className="absolute top-1.5 right-1.5 p-1.5 rounded-md bg-black/80 backdrop-blur text-muted-foreground hover:text-red-400 hover:bg-red-500/20 opacity-70 md:opacity-0 md:group-hover:opacity-100 transition z-10"
                     aria-label="Delete video"
                   >
-                    <X size={12} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               ))}

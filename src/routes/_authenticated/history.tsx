@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { confirmDialog } from "@/components/ConfirmDialog";
 
 export const Route = createFileRoute("/_authenticated/history")({
   component: HistoryPage,
@@ -28,8 +29,13 @@ function HistoryPage() {
     (v.title ?? "").toLowerCase().includes(q.toLowerCase()),
   );
 
-  async function deleteVideo(v: { id: string; source_type: string; storage_path: string | null }) {
-    if (!confirm("Delete this video and its notes?")) return;
+  async function deleteVideo(v: { id: string; source_type: string; storage_path: string | null; title: string | null }) {
+    const ok = await confirmDialog({
+      title: "Delete this video?",
+      description: `"${v.title || "Untitled"}" and all its notes will be permanently removed.`,
+      confirmLabel: "Delete video",
+    });
+    if (!ok) return;
     if (v.source_type === "upload" && v.storage_path) {
       await supabase.storage.from("shadowing-videos").remove([v.storage_path]);
     }
@@ -42,7 +48,12 @@ function HistoryPage() {
   }
 
   async function clearAll() {
-    if (!confirm("Delete ALL your shadowing history? This cannot be undone.")) return;
+    const ok = await confirmDialog({
+      title: "Clear all shadowing history?",
+      description: "Every video and note will be permanently deleted. This cannot be undone.",
+      confirmLabel: "Delete everything",
+    });
+    if (!ok) return;
     const user = (await supabase.auth.getUser()).data.user;
     if (!user) return;
     const uploads = (videos.data ?? []).filter((v) => v.source_type === "upload" && v.storage_path);
