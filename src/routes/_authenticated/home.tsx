@@ -25,35 +25,35 @@ function HomePage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div>
         <p className="label-mono text-[color:var(--color-gold)]">Welcome back</p>
         <h1 className="text-3xl md:text-4xl font-bold mt-1">
-          Prêt·e pour ta prochaine session ?
+          Ready for your next session?
         </h1>
         <p className="text-muted-foreground mt-2">
-          Génère des fiches, plonge dans des leçons complètes, ou entraîne-toi au shadowing.
+          Generate cards, dive into full lessons, or practice with shadowing.
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <StatCard label="Mots générés" value={stats.data?.cards ?? 0} />
-        <StatCard label="Leçons consultées" value={stats.data?.lessons ?? 0} />
-        <StatCard label="Vidéos shadowing" value={stats.data?.videos ?? 0} />
+        <StatCard label="Words generated" value={stats.data?.cards ?? 0} />
+        <StatCard label="Lessons opened" value={stats.data?.lessons ?? 0} />
+        <StatCard label="Shadowing videos" value={stats.data?.videos ?? 0} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
         <ActionCard
           to="/generate"
           icon={<Sparkles size={28} />}
-          title="Générer une fiche"
-          desc="Un mot en anglais → une fiche complète prête pour Anki."
+          title="Generate a card"
+          desc="One English word → a full card ready for Anki."
         />
         <ActionCard
           to="/shadowing"
           icon={<Video size={28} />}
-          title="Shadowing sur vidéo"
-          desc="YouTube ou upload local, prends des notes, génère des fiches."
+          title="Video shadowing"
+          desc="YouTube or local upload, take notes, generate cards."
         />
       </div>
     </div>
@@ -62,7 +62,7 @@ function HomePage() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="glass-panel p-4 md:p-5 text-center">
+    <div className="glass-panel p-4 md:p-5 text-center transition hover:-translate-y-0.5">
       <div className="text-3xl md:text-4xl font-bold text-[color:var(--color-gold)]">{value}</div>
       <div className="label-mono mt-1">{label}</div>
     </div>
@@ -83,7 +83,7 @@ function ActionCard({
   return (
     <Link
       to={to}
-      className="glass-panel p-6 md:p-8 flex flex-col gap-3 hover:border-[color:var(--color-crimson-glow)] transition-all hover:-translate-y-0.5"
+      className="glass-panel p-6 md:p-8 flex flex-col gap-3 hover:border-[color:var(--color-crimson-glow)] transition-all duration-200 hover:-translate-y-1"
     >
       <div className="text-[color:var(--color-gold)]">{icon}</div>
       <h3 className="text-xl font-semibold">{title}</h3>
