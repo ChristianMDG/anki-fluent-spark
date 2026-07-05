@@ -67,7 +67,7 @@ export function FullLessonModal({ cardId, word, ipa, level, onClose }: Props) {
     try {
       const fresh = await genFn({ data: { cardId, force: true } });
       qc.setQueryData(["lesson", cardId], fresh);
-      toast.success("Leçon régénérée");
+      toast.success("Lesson regenerated");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -129,9 +129,9 @@ export function FullLessonModal({ cardId, word, ipa, level, onClose }: Props) {
             {query.isLoading && <LoadingLesson />}
             {query.isError && (
               <div className="text-center py-12">
-                <p className="text-destructive-foreground">Erreur : {(query.error as Error).message}</p>
+                <p className="text-destructive-foreground">Error: {(query.error as Error).message}</p>
                 <button onClick={() => query.refetch()} className="btn-crimson mt-4 rounded-lg px-4 py-2">
-                  Réessayer
+                  Retry
                 </button>
               </div>
             )}
@@ -384,7 +384,7 @@ function LoadingLesson() {
       <div className="h-3 bg-white/5 rounded" />
       <div className="h-3 bg-white/5 rounded w-4/5" />
       <div className="h-3 bg-white/5 rounded w-3/5" />
-      <p className="text-center text-muted-foreground text-sm pt-8">Génération de la leçon…</p>
+      <p className="text-center text-muted-foreground text-sm pt-8">Generating lesson…</p>
     </div>
   );
 }
