@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
-import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check } from "lucide-react";
+import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
@@ -410,7 +410,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
         <input
           value={wordInput}
           onChange={(e) => setWordInput(e.target.value)}
-          placeholder={videoId ? "Mot ou expression + Entrée" : "Charge d'abord une vidéo"}
+          placeholder={videoId ? "Mot ou expression" : "Charge d'abord une vidéo"}
           disabled={!videoId}
           className="w-full glass-panel-soft px-3 py-2 rounded-lg text-sm"
         />
@@ -421,6 +421,13 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
           disabled={!videoId}
           className="w-full glass-panel-soft px-3 py-2 rounded-lg text-xs"
         />
+        <button
+          type="submit"
+          disabled={!videoId || !wordInput.trim() || addNote.isPending}
+          className="btn-crimson rounded-lg px-3 py-2 text-sm w-full flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <Plus size={14} /> {addNote.isPending ? "Ajout…" : "Créer la note"}
+        </button>
       </form>
 
       <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
