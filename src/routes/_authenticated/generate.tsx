@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { VocabCard, type CardRow } from "@/components/VocabCard";
 import { toast } from "sonner";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { ChevronDown, Sparkles, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/generate")({
   component: GeneratePage,
@@ -43,16 +43,38 @@ function GeneratePage() {
       setWord("");
       qc.invalidateQueries({ queryKey: ["cards"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
-      toast.success(`Fiche pour "${card.word}" créée`);
+      toast.success(`Card for "${card.word}" created`);
     },
     onError: (err) => toast.error((err as Error).message),
   });
 
+  async function deleteCard(id: string) {
+    if (!confirm("Delete this card and its lesson?")) return;
+    const { error } = await supabase.from("cards").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    if (currentCard?.id === id) setCurrentCard(null);
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("Card deleted");
+  }
+
+  async function clearAllCards() {
+    if (!confirm("Delete ALL your cards? This cannot be undone.")) return;
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) return;
+    const { error } = await supabase.from("cards").delete().eq("user_id", user.id);
+    if (error) return toast.error(error.message);
+    setCurrentCard(null);
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("All cards deleted");
+  }
+
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div>
         <p className="label-mono text-[color:var(--color-gold)]">Step 1</p>
-        <h1 className="text-3xl font-bold mt-1">Choisis ton mot</h1>
+        <h1 className="text-3xl font-bold mt-1">Pick your word</h1>
       </div>
 
       <form
@@ -67,7 +89,7 @@ function GeneratePage() {
           <input
             value={word}
             onChange={(e) => setWord(e.target.value)}
-            placeholder="Un mot ou une expression en anglais…"
+            placeholder="An English word or expression…"
             className="flex-1 glass-panel-soft px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--color-crimson-glow)]"
             required
           />
@@ -78,7 +100,7 @@ function GeneratePage() {
           >
             {LEVELS.map((l) => (
               <option key={l} value={l} className="bg-black">
-                {l || "Niveau ?"}
+                {l || "Level ?"}
               </option>
             ))}
           </select>
@@ -88,36 +110,46 @@ function GeneratePage() {
             className="btn-crimson rounded-lg px-6 py-3 font-medium flex items-center gap-2"
           >
             <Sparkles size={16} />
-            {gen.isPending ? "Génération…" : "Générer"}
+            {gen.isPending ? "Generating…" : "Generate"}
           </button>
         </div>
       </form>
 
       {currentCard && (
         <div>
-          <p className="label-mono text-[color:var(--color-gold)] mb-3">Ta fiche</p>
-          <VocabCard card={currentCard} />
+          <p className="label-mono text-[color:var(--color-gold)] mb-3">Your card</p>
+          <VocabCard card={currentCard} onDelete={() => deleteCard(currentCard.id)} />
         </div>
       )}
 
       <div>
-        <button
-          onClick={() => setHistoryOpen(!historyOpen)}
-          className="flex items-center gap-2 label-mono hover:text-foreground transition"
-        >
-          <ChevronDown
-            size={14}
-            className={`transition ${historyOpen ? "rotate-0" : "-rotate-90"}`}
-          />
-          Fiches précédentes ({history.data?.length ?? 0})
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setHistoryOpen(!historyOpen)}
+            className="flex items-center gap-2 label-mono hover:text-foreground transition"
+          >
+            <ChevronDown
+              size={14}
+              className={`transition ${historyOpen ? "rotate-0" : "-rotate-90"}`}
+            />
+            Previous cards ({history.data?.length ?? 0})
+          </button>
+          {historyOpen && (history.data?.length ?? 0) > 0 && (
+            <button
+              onClick={clearAllCards}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-400 transition"
+            >
+              <Trash2 size={12} /> Clear all
+            </button>
+          )}
+        </div>
         {historyOpen && history.data && (
           <div className="mt-4 space-y-3">
             {history.data.map((c) => (
-              <VocabCard key={c.id} card={c} compact />
+              <VocabCard key={c.id} card={c} compact onDelete={() => deleteCard(c.id)} />
             ))}
             {history.data.length === 0 && (
-              <p className="text-sm text-muted-foreground">Aucune fiche pour le moment.</p>
+              <p className="text-sm text-muted-foreground">No cards yet.</p>
             )}
           </div>
         )}
