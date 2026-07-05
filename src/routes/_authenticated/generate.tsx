@@ -57,7 +57,15 @@ function GeneratePage() {
   });
 
   async function deleteCard(id: string) {
-    if (!confirm("Delete this card and its lesson?")) return;
+    const card = (history.data ?? []).find((c) => c.id === id) ?? currentCard;
+    const ok = await confirmDialog({
+      title: "Delete this card?",
+      description: card
+        ? `"${card.word}" and its full lesson will be permanently removed.`
+        : "This card and its lesson will be permanently removed.",
+      confirmLabel: "Delete card",
+    });
+    if (!ok) return;
     const { error } = await supabase.from("cards").delete().eq("id", id);
     if (error) return toast.error(error.message);
     if (currentCard?.id === id) setCurrentCard(null);
@@ -67,7 +75,12 @@ function GeneratePage() {
   }
 
   async function clearAllCards() {
-    if (!confirm("Delete ALL your cards? This cannot be undone.")) return;
+    const ok = await confirmDialog({
+      title: "Delete all your cards?",
+      description: `${history.data?.length ?? 0} cards and their lessons will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Delete everything",
+    });
+    if (!ok) return;
     const user = (await supabase.auth.getUser()).data.user;
     if (!user) return;
     const { error } = await supabase.from("cards").delete().eq("user_id", user.id);
