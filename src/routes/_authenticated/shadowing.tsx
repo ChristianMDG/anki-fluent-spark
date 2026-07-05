@@ -66,7 +66,7 @@ function ShadowingPage() {
 
   async function loadYoutube() {
     const id = extractYouTubeId(ytUrl.trim());
-    if (!id) return toast.error("URL YouTube invalide");
+    if (!id) return toast.error("Invalid YouTube URL");
     let title = "";
     let thumbnail_url = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
     try {
@@ -101,7 +101,7 @@ function ShadowingPage() {
   }
 
   async function handleUpload(file: File) {
-    if (file.size > 200 * 1024 * 1024) return toast.error("Fichier trop volumineux (max 200 Mo)");
+    if (file.size > 200 * 1024 * 1024) return toast.error("File too large (200 MB max)");
     setUploading(true);
     try {
       const user = (await supabase.auth.getUser()).data.user!;
@@ -125,7 +125,7 @@ function ShadowingPage() {
       setUploadedUrl(signed.data?.signedUrl ?? null);
       qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
-      toast.success("Vidéo importée");
+      toast.success("Video imported");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -143,6 +143,24 @@ function ShadowingPage() {
     } else {
       setUploadedUrl(null);
     }
+  }
+
+  async function deleteVideo(v: VideoRow, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm("Delete this video and its notes?")) return;
+    if (v.source_type === "upload" && v.storage_path) {
+      await supabase.storage.from("shadowing-videos").remove([v.storage_path]);
+    }
+    await supabase.from("shadowing_notes").delete().eq("video_id", v.id);
+    const { error } = await supabase.from("shadowing_videos").delete().eq("id", v.id);
+    if (error) return toast.error(error.message);
+    if (currentVideo?.id === v.id) {
+      setCurrentVideo(null);
+      setUploadedUrl(null);
+    }
+    qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("Video deleted");
   }
 
   function seek(delta: number) {
@@ -177,13 +195,13 @@ function ShadowingPage() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <p className="label-mono text-[color:var(--color-gold)]">Shadowing</p>
-          <h1 className="text-3xl font-bold mt-1">Entraîne ton oreille et ta bouche</h1>
+          <h1 className="text-3xl font-bold mt-1">Train your ear and your mouth</h1>
         </div>
         <Link
           to="/history"
           className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
         >
-          Voir tout l'historique →
+          View full history →
         </Link>
       </div>
 
@@ -198,7 +216,7 @@ function ShadowingPage() {
                   mode === "youtube" ? "bg-[color:var(--color-crimson)]/40" : ""
                 }`}
               >
-                <Youtube size={14} /> Lien YouTube
+                <Youtube size={14} /> YouTube link
               </button>
               <button
                 onClick={() => setMode("upload")}
@@ -206,7 +224,7 @@ function ShadowingPage() {
                   mode === "upload" ? "bg-[color:var(--color-crimson)]/40" : ""
                 }`}
               >
-                <Upload size={14} /> Uploader
+                <Upload size={14} /> Upload
               </button>
             </div>
 
@@ -224,7 +242,7 @@ function ShadowingPage() {
                   placeholder="https://youtube.com/watch?v=…"
                   className="flex-1 glass-panel-soft px-3 py-2 rounded-lg text-sm"
                 />
-                <button className="btn-crimson rounded-lg px-4 py-2 text-sm">Charger</button>
+                <button className="btn-crimson rounded-lg px-4 py-2 text-sm">Load</button>
               </form>
             ) : (
               <label className="block glass-panel-soft border-dashed border-2 border-[color:var(--color-border)] rounded-lg p-6 text-center cursor-pointer hover:border-[color:var(--color-crimson-glow)] transition">
@@ -239,7 +257,7 @@ function ShadowingPage() {
                 />
                 <Upload className="mx-auto mb-2 text-[color:var(--color-gold)]" size={28} />
                 <p className="text-sm">
-                  {uploading ? "Upload en cours…" : "Glisse une vidéo ou clique pour parcourir"}
+                  {uploading ? "Uploading…" : "Drop a video or click to browse"}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">.mp4, .webm, .mov — max 200 Mo</p>
               </label>
@@ -261,7 +279,7 @@ function ShadowingPage() {
                   <video ref={videoRef} src={uploadedUrl} controls className="w-full h-full" />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                    Chargement…
+                    Loading…
                   </div>
                 )}
               </div>
@@ -284,29 +302,40 @@ function ShadowingPage() {
 
           {/* History strip */}
           <div>
-            <p className="label-mono mb-2">Historique récent</p>
+            <p className="label-mono mb-2">Recent history</p>
             <div className="flex gap-3 overflow-x-auto pb-2">
               {videos.data?.map((v) => (
-                <button
+                <div
                   key={v.id}
-                  onClick={() => loadFromHistory(v)}
-                  className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition text-left"
+                  className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
                 >
-                  <div className="aspect-video bg-black">
-                    {v.thumbnail_url ? (
-                      <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                        {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-2 text-xs truncate">{v.title || "Sans titre"}</div>
-                </button>
+                  <button
+                    onClick={() => loadFromHistory(v)}
+                    className="w-full text-left"
+                  >
+                    <div className="aspect-video bg-black">
+                      {v.thumbnail_url ? (
+                        <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                          {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
+                  </button>
+                  <button
+                    onClick={(e) => deleteVideo(v, e)}
+                    className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 backdrop-blur text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    aria-label="Delete video"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               ))}
               {videos.data?.length === 0 && (
                 <p className="text-sm text-muted-foreground py-4">
-                  Ton historique apparaîtra ici.
+                  Your history will appear here.
                 </p>
               )}
             </div>
@@ -344,7 +373,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
 
   const addNote = useMutation({
     mutationFn: async () => {
-      if (!videoId) throw new Error("Charge une vidéo d'abord");
+      if (!videoId) throw new Error("Load a video first");
       const user = (await supabase.auth.getUser()).data.user!;
       const { error } = await supabase.from("shadowing_notes").insert({
         video_id: videoId,
@@ -368,7 +397,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
       await supabase.from("shadowing_notes").update({ card_id: card.id }).eq("id", note.id);
       qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
       qc.invalidateQueries({ queryKey: ["cards"] });
-      toast.success(`Fiche générée pour "${note.word}"`);
+      toast.success(`Card generated for "${note.word}"`);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -398,7 +427,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
 
   return (
     <div className="glass-panel p-4 flex flex-col gap-3 max-h-[calc(100vh-160px)]">
-      <p className="label-mono">Mes notes</p>
+      <p className="label-mono">My notes</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -410,14 +439,14 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
         <input
           value={wordInput}
           onChange={(e) => setWordInput(e.target.value)}
-          placeholder={videoId ? "Mot ou expression" : "Charge d'abord une vidéo"}
+          placeholder={videoId ? "Word or expression" : "Load a video first"}
           disabled={!videoId}
           className="w-full glass-panel-soft px-3 py-2 rounded-lg text-sm"
         />
         <input
           value={contextInput}
           onChange={(e) => setContextInput(e.target.value)}
-          placeholder="Contexte (facultatif)"
+          placeholder="Context (optional)"
           disabled={!videoId}
           className="w-full glass-panel-soft px-3 py-2 rounded-lg text-xs"
         />
@@ -426,7 +455,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
           disabled={!videoId || !wordInput.trim() || addNote.isPending}
           className="btn-crimson rounded-lg px-3 py-2 text-sm w-full flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          <Plus size={14} /> {addNote.isPending ? "Ajout…" : "Créer la note"}
+          <Plus size={14} /> {addNote.isPending ? "Adding…" : "Create note"}
         </button>
       </form>
 
@@ -448,12 +477,12 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
               <div className="flex gap-1 shrink-0">
                 {n.card_id ? (
                   <span className="text-xs text-emerald-400 flex items-center gap-1">
-                    <Check size={12} /> Fiche
+                    <Check size={12} /> Card
                   </span>
                 ) : (
                   <button
                     onClick={() => generateForNote(n)}
-                    title="Générer une fiche"
+                    title="Generate a card"
                     className="p-1.5 hover:bg-white/10 rounded text-[color:var(--color-gold)]"
                   >
                     <Zap size={14} />
@@ -471,7 +500,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
         ))}
         {videoId && notes.data?.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-6">
-            Ajoute des mots pendant que tu regardes.
+            Add words as you watch.
           </p>
         )}
       </div>
@@ -485,7 +514,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
           <Zap size={14} />
           {batchProgress
             ? `${batchProgress.done}/${batchProgress.total}…`
-            : `Générer toutes les fiches (${pendingCount})`}
+            : `Generate all cards (${pendingCount})`}
         </button>
       )}
     </div>
