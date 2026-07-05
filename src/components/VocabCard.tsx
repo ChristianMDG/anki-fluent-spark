@@ -42,8 +42,8 @@ export function VocabCard({ card, compact = false, onDelete }: { card: CardRow; 
       return toast.error(error.message);
     }
     qc.invalidateQueries({ queryKey: ["cards"] });
-    toast.success(!nextExportedValue ? "Ajoutée à l'export" : "Retirée de l'export");
-    void newExported; // silence
+    toast.success(!nextExportedValue ? "Added to export queue" : "Removed from export");
+    void newExported;
   }
 
   return (
