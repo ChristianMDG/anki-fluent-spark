@@ -1,5 +1,16 @@
-// Parses Groq/LLM-style structured card responses using strict header markers.
-// Also transforms parsed fields into HTML for display.
+// Parses the LLM structured card response into 13 fields.
+// Also exposes formatters that produce the EXACT HTML expected by the Anki
+// note type "English Expression Master" (13 fields, #html:true).
+//
+// Stored HTML uses only tags/classes referenced by the Anki templates:
+//   <p class="mini-title">…</p>
+//   <ul><li>…</li></ul>
+//   <ol><li>…</li></ol>
+//   <span class="answer-highlight">→ …</span>
+//   <br> (only inside French for multi-translations)
+//
+// The same HTML is rendered inside the app via dangerouslySetInnerHTML — the
+// classes .mini-title and .answer-highlight are defined in src/styles.css.
 
 export interface ParsedCard {
   word: string;
@@ -17,7 +28,6 @@ export interface ParsedCard {
   speaking_a2: string;
 }
 
-// Ignore parenthesised hints like "(simple English)".
 const HEADERS: { key: keyof ParsedCard | "SPEAKING"; label: string }[] = [
   { key: "word", label: "WORD" },
   { key: "level", label: "LEVEL" },
@@ -40,6 +50,82 @@ function matchesHeader(line: string, label: string): boolean {
   return t === label || t.startsWith(label + " ");
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Convert raw grammar lines into Anki-compatible HTML.
+ * Rules:
+ *  - a line ending with ":" becomes <p class="mini-title">Label:</p>
+ *  - every following non-empty line (with or without leading *, -, •) becomes
+ *    an <li> inside a <ul> opened right after the mini-title and closed
+ *    before the next mini-title.
+ */
+export function formatGrammar(rawLines: string[]): string {
+  const out: string[] = [];
+  let inList = false;
+  const closeList = () => {
+    if (inList) {
+      out.push("</ul>");
+      inList = false;
+    }
+  };
+  for (const raw of rawLines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (/:\s*$/.test(line) && !/^\s*[*\-•]/.test(line)) {
+      closeList();
+      out.push(`<p class="mini-title">${escapeHtml(line.replace(/\s*:\s*$/, ""))}:</p>`);
+      out.push("<ul>");
+      inList = true;
+    } else {
+      const cleaned = line.replace(/^\s*[*\-•]\s*/, "").replace(/^\s*\d+[.)]\s*/, "");
+      if (!inList) {
+        out.push("<ul>");
+        inList = true;
+      }
+      out.push(`<li>${escapeHtml(cleaned)}</li>`);
+    }
+  }
+  closeList();
+  return out.join("");
+}
+
+/**
+ * Convert raw lines into an ordered list <ol><li>…</li></ol>.
+ * When highlightArrow is true, any text after the first "→" in a line is
+ * wrapped in <span class="answer-highlight">→ …</span>.
+ */
+export function formatOrderedList(rawLines: string[], highlightArrow = false): string {
+  const items = rawLines
+    .map((l) =>
+      l.trim().replace(/^\s*(\d+[.)]|[-*•])\s*/, ""),
+    )
+    .filter(Boolean);
+  const lis = items.map((raw) => {
+    if (highlightArrow) {
+      const idx = raw.indexOf("→");
+      if (idx >= 0) {
+        const q = escapeHtml(raw.slice(0, idx).trim());
+        const a = escapeHtml(raw.slice(idx + 1).trim());
+        return `<li>${q} <span class="answer-highlight">→ ${a}</span></li>`;
+      }
+    }
+    return `<li>${escapeHtml(raw)}</li>`;
+  });
+  return `<ol>${lis.join("")}</ol>`;
+}
+
+function formatFrench(raw: string): string {
+  const parts = raw
+    .split(/\r?\n|;|\s*\/\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? "";
+  return parts.map((p) => escapeHtml(p)).join("<br>");
+}
+
 export function parseCard(raw: string): ParsedCard {
   const lines = raw.split(/\r?\n/);
   const buckets: Record<string, string[]> = {};
@@ -60,20 +146,23 @@ export function parseCard(raw: string): ParsedCard {
     if (current) buckets[current].push(line);
   }
 
-  const get = (k: string) => (buckets[k] || []).join("\n").trim();
-  const speakingText = get("SPEAKING");
+  const getLines = (k: string): string[] => (buckets[k] || []).map((l) => l);
+  const getText = (k: string): string => getLines(k).join("\n").trim();
+  const cleanInline = (s: string) => s.replace(/\r/g, "").trim();
+
+  const speakingText = getText("SPEAKING");
   const { q1, a1, q2, a2 } = parseSpeaking(speakingText);
 
   return {
-    word: get("word"),
-    level: get("level"),
-    ipa: get("ipa"),
-    pos: get("pos"),
-    definition: get("definition"),
-    french: get("french"),
-    grammar: get("grammar"),
-    examples: get("examples"),
-    cloze: get("cloze"),
+    word: cleanInline(getText("word")),
+    level: cleanInline(getText("level")).replace(/[^A-Za-z0-9+]/g, ""),
+    ipa: cleanInline(getText("ipa")),
+    pos: cleanInline(getText("pos")),
+    definition: cleanInline(getText("definition")),
+    french: formatFrench(getText("french")),
+    grammar: formatGrammar(getLines("grammar")),
+    examples: formatOrderedList(getLines("examples"), false),
+    cloze: formatOrderedList(getLines("cloze"), true),
     speaking_q1: q1,
     speaking_a1: a1,
     speaking_q2: q2,
@@ -88,8 +177,8 @@ function parseSpeaking(text: string): { q1: string; a1: string; q2: string; a2: 
   for (const l of lines) {
     const q = l.match(/^\s*Question\s*:?\s*(.*)$/i);
     const a = l.match(/^\s*Answer\s*:?\s*(.*)$/i);
-    if (q) qs.push(q[1].trim());
-    else if (a) as.push(a[1].trim());
+    if (q && q[1].trim()) qs.push(q[1].trim());
+    else if (a && a[1].trim()) as.push(a[1].trim());
   }
   return {
     q1: qs[0] || "",
@@ -99,71 +188,25 @@ function parseSpeaking(text: string): { q1: string; a1: string; q2: string; a2: 
   };
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+// -------- Display helpers (backwards-compatible) --------
+// Fields are now stored already as HTML, so these helpers only re-format if
+// they still contain raw markers (legacy rows created before this change).
+
+function looksLikeHtml(s: string): boolean {
+  return /<(ul|ol|p|span|br)\b/i.test(s);
 }
 
 export function grammarToHtml(grammar: string): string {
-  const out: string[] = [];
-  const lines = grammar.split(/\r?\n/);
-  let inList = false;
-  const closeList = () => {
-    if (inList) {
-      out.push("</ul>");
-      inList = false;
-    }
-  };
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) {
-      closeList();
-      continue;
-    }
-    if (/^(Structure|Used to|Common forms)\s*:/i.test(line)) {
-      closeList();
-      out.push(`<p class="mini-title">${escapeHtml(line.replace(/:\s*$/, ""))}</p>`);
-    } else if (line.startsWith("*")) {
-      if (!inList) {
-        out.push('<ul class="list-disc pl-5 space-y-1 text-sm">');
-        inList = true;
-      }
-      out.push(`<li>${escapeHtml(line.replace(/^\*\s*/, ""))}</li>`);
-    } else {
-      closeList();
-      out.push(`<p class="text-sm">${escapeHtml(line)}</p>`);
-    }
-  }
-  closeList();
-  return out.join("\n");
+  if (looksLikeHtml(grammar)) return grammar;
+  return formatGrammar(grammar.split(/\r?\n/));
 }
 
 export function examplesToHtml(examples: string): string {
-  const items = examples
-    .split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(\d+[\.\)]|\-|\*)\s*/, "").trim())
-    .filter(Boolean);
-  return `<ol class="list-decimal pl-5 space-y-2">${items
-    .map((i) => `<li>${escapeHtml(i)}</li>`)
-    .join("")}</ol>`;
+  if (looksLikeHtml(examples)) return examples;
+  return formatOrderedList(examples.split(/\r?\n/), false);
 }
 
 export function clozeToHtml(cloze: string): string {
-  const items = cloze
-    .split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(\d+[\.\)]|\-|\*)\s*/, "").trim())
-    .filter(Boolean);
-  return `<ol class="list-decimal pl-5 space-y-2">${items
-    .map((i) => {
-      const idx = i.indexOf("→");
-      if (idx >= 0) {
-        const q = escapeHtml(i.slice(0, idx).trim());
-        const a = escapeHtml(i.slice(idx + 1).trim());
-        return `<li>${q} <span class="answer-highlight">→ ${a}</span></li>`;
-      }
-      return `<li>${escapeHtml(i)}</li>`;
-    })
-    .join("")}</ol>`;
+  if (looksLikeHtml(cloze)) return cloze;
+  return formatOrderedList(cloze.split(/\r?\n/), true);
 }
