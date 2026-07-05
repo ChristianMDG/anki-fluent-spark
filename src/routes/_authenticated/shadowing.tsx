@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
-import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus } from "lucide-react";
+import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2 } from "lucide-react";
+import { confirmDialog } from "@/components/ConfirmDialog";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
