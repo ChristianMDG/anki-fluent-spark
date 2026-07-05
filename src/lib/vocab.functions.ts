@@ -153,7 +153,7 @@ export const generateFullLesson = createServerFn({ method: "POST" })
         .select("content")
         .eq("card_id", data.cardId)
         .maybeSingle();
-      if (existing) return existing.content as unknown;
+      if (existing) return existing.content as Record<string, unknown>;
     }
 
     const { data: card, error: cardErr } = await supabase
@@ -185,5 +185,5 @@ export const generateFullLesson = createServerFn({ method: "POST" })
         { onConflict: "card_id" },
       );
     if (upErr) throw new Error(upErr.message);
-    return content;
+    return content as Record<string, unknown>;
   });
