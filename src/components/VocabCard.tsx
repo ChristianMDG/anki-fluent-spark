@@ -104,7 +104,7 @@ export function VocabCard({ card, compact = false, onDelete }: { card: CardRow; 
             onClick={() => setOpenLesson(true)}
             className="btn-crimson rounded-lg px-4 py-2.5 text-sm flex items-center gap-2"
           >
-            <Book size={16} /> Leçon complète
+            <Book size={16} /> Full lesson
           </button>
           <button
             onClick={markExport}
@@ -115,8 +115,16 @@ export function VocabCard({ card, compact = false, onDelete }: { card: CardRow; 
             }`}
           >
             {!exported ? <Check size={16} /> : <Plus size={16} />}
-            {!exported ? "Prête à exporter" : "Ajouter à l'export"}
+            {!exported ? "Ready to export" : "Add to export"}
           </button>
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="ml-auto rounded-lg px-3 py-2.5 text-sm flex items-center gap-1.5 border border-[color:var(--color-border)] text-muted-foreground hover:text-red-400 hover:border-red-500/40 transition"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       </article>
 
