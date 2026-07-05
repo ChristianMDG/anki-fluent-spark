@@ -26,20 +26,24 @@ export function VocabCard({ card, compact = false }: { card: CardRow; compact?: 
   const qc = useQueryClient();
 
   async function markExport() {
-    const newVal = !exported;
-    setExported(newVal);
+    // Semantic: exported=false means "pending export" (in the export queue)
+    // Toggle the flag; UI shows "Prête à exporter" when exported=false
+    const newExported = !exported ? false : true;
+    // Actually simpler: user clicks "Add to export" when card is not queued → set exported=false
+    // and "Remove" when queued → set exported=true (i.e. treated as already exported)
+    const nextExportedValue = exported ? false : true;
+    setExported(nextExportedValue);
     const { error } = await supabase
       .from("cards")
-      .update({ exported: !newVal ? true : false })
-      // toggle: if newVal=true means "add to export queue" → exported=false
+      .update({ exported: nextExportedValue })
       .eq("id", card.id);
-    // simpler: keep semantic — exported=false means pending
-    // We reversed above; fix by explicit set:
-    if (!error) {
-      await supabase.from("cards").update({ exported: !newVal }).eq("id", card.id);
-      qc.invalidateQueries({ queryKey: ["cards"] });
+    if (error) {
+      setExported(exported);
+      return toast.error(error.message);
     }
-    toast.success(newVal ? "Ajoutée à l'export" : "Retirée de l'export");
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    toast.success(!nextExportedValue ? "Ajoutée à l'export" : "Retirée de l'export");
+    void newExported; // silence
   }
 
   return (
