@@ -14,7 +14,179 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cards: {
+        Row: {
+          cloze: string | null
+          created_at: string
+          definition: string | null
+          examples: string | null
+          exported: boolean
+          french: string | null
+          grammar: string | null
+          id: string
+          ipa: string | null
+          level: string | null
+          pos: string | null
+          speaking_a1: string | null
+          speaking_a2: string | null
+          speaking_q1: string | null
+          speaking_q2: string | null
+          user_id: string
+          word: string
+        }
+        Insert: {
+          cloze?: string | null
+          created_at?: string
+          definition?: string | null
+          examples?: string | null
+          exported?: boolean
+          french?: string | null
+          grammar?: string | null
+          id?: string
+          ipa?: string | null
+          level?: string | null
+          pos?: string | null
+          speaking_a1?: string | null
+          speaking_a2?: string | null
+          speaking_q1?: string | null
+          speaking_q2?: string | null
+          user_id: string
+          word: string
+        }
+        Update: {
+          cloze?: string | null
+          created_at?: string
+          definition?: string | null
+          examples?: string | null
+          exported?: boolean
+          french?: string | null
+          grammar?: string | null
+          id?: string
+          ipa?: string | null
+          level?: string | null
+          pos?: string | null
+          speaking_a1?: string | null
+          speaking_a2?: string | null
+          speaking_q1?: string | null
+          speaking_q2?: string | null
+          user_id?: string
+          word?: string
+        }
+        Relationships: []
+      }
+      lessons: {
+        Row: {
+          card_id: string
+          content: Json
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          card_id: string
+          content: Json
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          card_id?: string
+          content?: Json
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: true
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shadowing_notes: {
+        Row: {
+          card_id: string | null
+          context: string | null
+          created_at: string
+          id: string
+          user_id: string
+          video_id: string
+          word: string
+        }
+        Insert: {
+          card_id?: string | null
+          context?: string | null
+          created_at?: string
+          id?: string
+          user_id: string
+          video_id: string
+          word: string
+        }
+        Update: {
+          card_id?: string | null
+          context?: string | null
+          created_at?: string
+          id?: string
+          user_id?: string
+          video_id?: string
+          word?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shadowing_notes_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shadowing_notes_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "shadowing_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shadowing_videos: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          source_type: string
+          storage_path: string | null
+          thumbnail_url: string | null
+          title: string | null
+          user_id: string
+          youtube_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          source_type: string
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+          user_id: string
+          youtube_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          source_type?: string
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          title?: string | null
+          user_id?: string
+          youtube_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
