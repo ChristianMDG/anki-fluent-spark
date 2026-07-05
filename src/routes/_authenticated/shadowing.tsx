@@ -145,6 +145,24 @@ function ShadowingPage() {
     }
   }
 
+  async function deleteVideo(v: VideoRow, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm("Delete this video and its notes?")) return;
+    if (v.source_type === "upload" && v.storage_path) {
+      await supabase.storage.from("shadowing-videos").remove([v.storage_path]);
+    }
+    await supabase.from("shadowing_notes").delete().eq("video_id", v.id);
+    const { error } = await supabase.from("shadowing_videos").delete().eq("id", v.id);
+    if (error) return toast.error(error.message);
+    if (currentVideo?.id === v.id) {
+      setCurrentVideo(null);
+      setUploadedUrl(null);
+    }
+    qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("Video deleted");
+  }
+
   function seek(delta: number) {
     if (currentVideo?.source_type === "upload" && videoRef.current) {
       videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + delta);
