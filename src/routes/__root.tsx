@@ -72,13 +72,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Génère des fiches Anki riches par IA, plonge dans des leçons immersives et pratique le shadowing sur tes vidéos préférées.",
       },
-      { property: "og:title", content: "Vocab to Anki" },
+      { property: "og:title", content: "Vocab to Anki — Apprends l'anglais autrement" },
       {
         property: "og:description",
         content: "Fiches IA, leçons complètes en anglais, shadowing vidéo pour francophones.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Vocab to Anki — Apprends l'anglais autrement" },
+      { name: "description", content: "Génère des fiches Anki riches par IA, plonge dans des leçons immersives et pratique le shadowing sur tes vidéos préférées." },
+      { property: "og:description", content: "Génère des fiches Anki riches par IA, plonge dans des leçons immersives et pratique le shadowing sur tes vidéos préférées." },
+      { name: "twitter:description", content: "Génère des fiches Anki riches par IA, plonge dans des leçons immersives et pratique le shadowing sur tes vidéos préférées." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/9e29d3ad-0c1b-4af0-a3c3-e01e6a349301" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/9e29d3ad-0c1b-4af0-a3c3-e01e6a349301" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
