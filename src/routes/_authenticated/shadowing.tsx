@@ -148,7 +148,13 @@ function ShadowingPage() {
 
   async function deleteVideo(v: VideoRow, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm("Delete this video and its notes?")) return;
+    e.preventDefault();
+    const ok = await confirmDialog({
+      title: "Delete this video?",
+      description: `"${v.title || "Untitled"}" and all its notes will be permanently removed.`,
+      confirmLabel: "Delete video",
+    });
+    if (!ok) return;
     if (v.source_type === "upload" && v.storage_path) {
       await supabase.storage.from("shadowing-videos").remove([v.storage_path]);
     }
