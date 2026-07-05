@@ -305,22 +305,33 @@ function ShadowingPage() {
             <p className="label-mono mb-2">Recent history</p>
             <div className="flex gap-3 overflow-x-auto pb-2">
               {videos.data?.map((v) => (
-                <button
+                <div
                   key={v.id}
-                  onClick={() => loadFromHistory(v)}
-                  className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition text-left"
+                  className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
                 >
-                  <div className="aspect-video bg-black">
-                    {v.thumbnail_url ? (
-                      <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                        {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
-                </button>
+                  <button
+                    onClick={() => loadFromHistory(v)}
+                    className="w-full text-left"
+                  >
+                    <div className="aspect-video bg-black">
+                      {v.thumbnail_url ? (
+                        <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                          {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
+                  </button>
+                  <button
+                    onClick={(e) => deleteVideo(v, e)}
+                    className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 backdrop-blur text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                    aria-label="Delete video"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
               ))}
               {videos.data?.length === 0 && (
                 <p className="text-sm text-muted-foreground py-4">
