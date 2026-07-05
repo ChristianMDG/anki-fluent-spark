@@ -7,6 +7,7 @@ import { generateVocabCard } from "@/lib/vocab.functions";
 import { VocabCard, type CardRow } from "@/components/VocabCard";
 import { toast } from "sonner";
 import { Sparkles, Trash2, Search, X, Loader2 } from "lucide-react";
+import { confirmDialog } from "@/components/ConfirmDialog";
 
 export const Route = createFileRoute("/_authenticated/generate")({
   component: GeneratePage,
