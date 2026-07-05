@@ -3,6 +3,21 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { parseCard } from "./parse-card";
 
+export interface FullLesson {
+  explanation: string;
+  pronunciationTips: string;
+  registerVariants: { register: string; example: string }[];
+  synonyms: { word: string; nuance: string }[];
+  antonyms: { word: string; nuance: string }[];
+  relatedIdioms: { phrase: string; meaning: string }[];
+  commonMistakes: string[];
+  collocations: string[];
+  dialogue: { title: string; lines: { speaker: string; text: string }[] };
+  readingPassage: string;
+  speakingPrompts: string[];
+  quiz: { question: string; options: string[]; correctIndex: number; explanation: string }[];
+}
+
 const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const AI_MODEL = "google/gemini-2.5-flash";
 
@@ -153,7 +168,7 @@ export const generateFullLesson = createServerFn({ method: "POST" })
         .select("content")
         .eq("card_id", data.cardId)
         .maybeSingle();
-      if (existing) return existing.content as Record<string, unknown>;
+      if (existing) return existing.content as unknown as FullLesson;
     }
 
     const { data: card, error: cardErr } = await supabase
@@ -165,7 +180,7 @@ export const generateFullLesson = createServerFn({ method: "POST" })
 
     const userMsg = `Word: ${card.word}\nLevel: ${card.level || "B1"}`;
 
-    const parseWithRetry = async (): Promise<unknown> => {
+    const parseWithRetry = async (): Promise<FullLesson> => {
       const raw = await callAI(LESSON_SYSTEM, userMsg, true);
       try {
         return JSON.parse(raw);
@@ -185,5 +200,5 @@ export const generateFullLesson = createServerFn({ method: "POST" })
         { onConflict: "card_id" },
       );
     if (upErr) throw new Error(upErr.message);
-    return content as Record<string, unknown>;
+    return content;
   });
