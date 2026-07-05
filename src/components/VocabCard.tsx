@@ -20,7 +20,7 @@ export interface CardRow {
   exported: boolean;
 }
 
-export function VocabCard({ card, compact = false }: { card: CardRow; compact?: boolean }) {
+export function VocabCard({ card, compact = false, onDelete }: { card: CardRow; compact?: boolean; onDelete?: () => void }) {
   const [openLesson, setOpenLesson] = useState(false);
   const [exported, setExported] = useState(card.exported);
   const qc = useQueryClient();
