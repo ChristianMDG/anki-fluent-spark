@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Book, Plus, Check } from "lucide-react";
+import { Book, Plus, Check, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { grammarToHtml, examplesToHtml, clozeToHtml } from "@/lib/parse-card";
 import { toast } from "sonner";
