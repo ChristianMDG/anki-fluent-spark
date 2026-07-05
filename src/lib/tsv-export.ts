@@ -23,8 +23,14 @@ const HEADER = [
 ].join("\n");
 
 function esc(s: string): string {
-  // Anki TSV: tabs delimit; newlines inside a field must become <br>.
-  return (s || "").replace(/\t/g, " ").replace(/\r?\n/g, "<br>");
+  // Anki TSV: tabs delimit rows; a physical newline ends the row.
+  // Fields already contain valid HTML (<ul>, <ol>, <p>, <span>, <br>) that
+  // must stay on ONE physical line. Collapse any stray whitespace/newlines.
+  return (s || "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\t/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function buildTsv(cards: ExportableCard[]): string {
