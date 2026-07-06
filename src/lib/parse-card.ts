@@ -26,6 +26,7 @@ export interface ParsedCard {
   speaking_a1: string;
   speaking_q2: string;
   speaking_a2: string;
+  tags: string[];
 }
 
 const HEADERS: { key: keyof ParsedCard | "SPEAKING"; label: string }[] = [
@@ -39,6 +40,7 @@ const HEADERS: { key: keyof ParsedCard | "SPEAKING"; label: string }[] = [
   { key: "examples", label: "EXAMPLES" },
   { key: "cloze", label: "CLOZE" },
   { key: "SPEAKING", label: "SPEAKING" },
+  { key: "tags", label: "TAGS" },
 ];
 
 function stripParens(line: string): string {
