@@ -30,11 +30,34 @@ const SECTIONS = [
   { id: "quiz", label: "Quiz" },
 ] as const;
 
-export function FullLessonModal({ cardId, word, ipa, level, onClose }: Props) {
+export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, onReviewChange, onClose }: Props) {
   const genFn = useServerFn(generateFullLesson);
   const qc = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState<string>("explanation");
+  const [needsReview, setNeedsReview] = useState<boolean>(!!initialNeedsReview);
+
+  async function flagReview() {
+    if (needsReview) return;
+    setNeedsReview(true);
+    onReviewChange?.(true);
+    await supabase.from("cards").update({ needs_review: true }).eq("id", cardId);
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+  }
+
+  async function clearReview() {
+    setNeedsReview(false);
+    onReviewChange?.(false);
+    const { error } = await supabase
+      .from("cards")
+      .update({ needs_review: false })
+      .eq("id", cardId);
+    if (error) return toast.error(error.message);
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("Marked as reviewed");
+  }
 
   const query = useQuery({
     queryKey: ["lesson", cardId],
