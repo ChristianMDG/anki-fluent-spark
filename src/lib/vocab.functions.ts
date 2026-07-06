@@ -54,6 +54,8 @@ Question: [question naturelle]
 Answer: [réponse modèle]
 Question: [deuxième question]
 Answer: [deuxième réponse]
+TAGS
+[2 à 4 tags en français séparés par des virgules, choisis parmi ou inspirés de : Entretien, Quotidien, Tech, Voyage, Académique, Business, Émotion, Nature, Culture, Santé, Sport. Choisis les tags les plus pertinents pour le contexte d'usage du mot.]
 
 Respecte cet ordre et ces en-têtes à la lettre près.`;
 
