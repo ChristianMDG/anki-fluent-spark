@@ -138,6 +138,8 @@ export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, 
               <X size={20} />
             </button>
           </div>
+        </header>
+
 
         {lesson && (
           <div className="border-b border-[color:var(--color-border)] overflow-x-auto">
