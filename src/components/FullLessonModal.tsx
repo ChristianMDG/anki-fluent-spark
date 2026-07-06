@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { X, RefreshCw, Volume2 } from "lucide-react";
+import { X, RefreshCw, Volume2, Check } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateFullLesson, type FullLesson } from "@/lib/vocab.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   word: string;
   ipa: string;
   level: string;
+  initialNeedsReview?: boolean;
+  onReviewChange?: (v: boolean) => void;
   onClose: () => void;
 }
 
@@ -27,11 +30,34 @@ const SECTIONS = [
   { id: "quiz", label: "Quiz" },
 ] as const;
 
-export function FullLessonModal({ cardId, word, ipa, level, onClose }: Props) {
+export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, onReviewChange, onClose }: Props) {
   const genFn = useServerFn(generateFullLesson);
   const qc = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState<string>("explanation");
+  const [needsReview, setNeedsReview] = useState<boolean>(!!initialNeedsReview);
+
+  async function flagReview() {
+    if (needsReview) return;
+    setNeedsReview(true);
+    onReviewChange?.(true);
+    await supabase.from("cards").update({ needs_review: true }).eq("id", cardId);
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+  }
+
+  async function clearReview() {
+    setNeedsReview(false);
+    onReviewChange?.(false);
+    const { error } = await supabase
+      .from("cards")
+      .update({ needs_review: false })
+      .eq("id", cardId);
+    if (error) return toast.error(error.message);
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("Marked as reviewed");
+  }
 
   const query = useQuery({
     queryKey: ["lesson", cardId],
@@ -99,10 +125,21 @@ export function FullLessonModal({ cardId, word, ipa, level, onClose }: Props) {
               {level && <span className="label-mono text-[color:var(--color-gold)]">{level}</span>}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            {needsReview && (
+              <button
+                onClick={clearReview}
+                className="hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition"
+              >
+                <Check size={13} /> Marquer révisé
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">
+              <X size={20} />
+            </button>
+          </div>
         </header>
+
 
         {lesson && (
           <div className="border-b border-[color:var(--color-border)] overflow-x-auto">
@@ -272,7 +309,8 @@ export function FullLessonModal({ cardId, word, ipa, level, onClose }: Props) {
                 </Section>
 
                 <Section id="quiz" title="Quiz" tone="red">
-                  <Quiz quiz={lesson.quiz} />
+                  <Quiz quiz={lesson.quiz} onWrong={flagReview} />
+
                 </Section>
 
                 <div className="pt-4 border-t border-[color:var(--color-border)]">
@@ -317,17 +355,17 @@ function Section({
   );
 }
 
-function Quiz({ quiz }: { quiz: FullLesson["quiz"] }) {
+function Quiz({ quiz, onWrong }: { quiz: FullLesson["quiz"]; onWrong?: () => void }) {
   return (
     <div className="space-y-5">
       {quiz?.map((q, i) => (
-        <QuizItem key={i} q={q} />
+        <QuizItem key={i} q={q} onWrong={onWrong} />
       ))}
     </div>
   );
 }
 
-function QuizItem({ q }: { q: FullLesson["quiz"][number] }) {
+function QuizItem({ q, onWrong }: { q: FullLesson["quiz"][number]; onWrong?: () => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   return (
     <div>
@@ -340,7 +378,10 @@ function QuizItem({ q }: { q: FullLesson["quiz"][number] }) {
             <button
               key={i}
               disabled={revealed}
-              onClick={() => setPicked(i)}
+              onClick={() => {
+                setPicked(i);
+                if (i !== q.correctIndex) onWrong?.();
+              }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition ${
                 revealed
                   ? isCorrect

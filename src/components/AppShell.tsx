@@ -1,6 +1,6 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { Home, Sparkles, Video, Download, LogOut } from "lucide-react";
+import { Home, Sparkles, Video, Download, LogOut, Library } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadTsv } from "@/lib/tsv-export";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 const NAV = [
   { to: "/home", label: "Home", icon: Home },
   { to: "/generate", label: "Generate", icon: Sparkles },
+  { to: "/library", label: "Library", icon: Library },
   { to: "/shadowing", label: "Shadowing", icon: Video },
 ] as const;
 

@@ -50,6 +50,7 @@ function GeneratePage() {
       setWord("");
       qc.invalidateQueries({ queryKey: ["cards"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
+      qc.invalidateQueries({ queryKey: ["daily_count"] });
       toast.success(`Card for "${card.word}" ready`);
       inputRef.current?.focus();
     },

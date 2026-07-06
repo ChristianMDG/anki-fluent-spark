@@ -26,11 +26,13 @@ export type Database = {
           id: string
           ipa: string | null
           level: string | null
+          needs_review: boolean
           pos: string | null
           speaking_a1: string | null
           speaking_a2: string | null
           speaking_q1: string | null
           speaking_q2: string | null
+          tags: string[]
           user_id: string
           word: string
         }
@@ -45,11 +47,13 @@ export type Database = {
           id?: string
           ipa?: string | null
           level?: string | null
+          needs_review?: boolean
           pos?: string | null
           speaking_a1?: string | null
           speaking_a2?: string | null
           speaking_q1?: string | null
           speaking_q2?: string | null
+          tags?: string[]
           user_id: string
           word: string
         }
@@ -64,13 +68,42 @@ export type Database = {
           id?: string
           ipa?: string | null
           level?: string | null
+          needs_review?: boolean
           pos?: string | null
           speaking_a1?: string | null
           speaking_a2?: string | null
           speaking_q1?: string | null
           speaking_q2?: string | null
+          tags?: string[]
           user_id?: string
           word?: string
+        }
+        Relationships: []
+      }
+      daily_goals: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          target_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          id?: string
+          target_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          target_count?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
