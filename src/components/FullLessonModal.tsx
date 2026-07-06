@@ -309,7 +309,8 @@ export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, 
                 </Section>
 
                 <Section id="quiz" title="Quiz" tone="red">
-                  <Quiz quiz={lesson.quiz} />
+                  <Quiz quiz={lesson.quiz} onWrong={flagReview} />
+
                 </Section>
 
                 <div className="pt-4 border-t border-[color:var(--color-border)]">
