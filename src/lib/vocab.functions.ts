@@ -148,6 +148,7 @@ export const generateVocabCard = createServerFn({ method: "POST" })
         speaking_a1: parsed.speaking_a1,
         speaking_q2: parsed.speaking_q2,
         speaking_a2: parsed.speaking_a2,
+        tags: parsed.tags,
       })
       .select()
       .single();
