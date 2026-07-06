@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { X, RefreshCw, Volume2 } from "lucide-react";
+import { X, RefreshCw, Volume2, Check } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { generateFullLesson, type FullLesson } from "@/lib/vocab.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   word: string;
   ipa: string;
   level: string;
+  initialNeedsReview?: boolean;
+  onReviewChange?: (v: boolean) => void;
   onClose: () => void;
 }
 
