@@ -169,7 +169,16 @@ export function parseCard(raw: string): ParsedCard {
     speaking_a1: a1,
     speaking_q2: q2,
     speaking_a2: a2,
+    tags: parseTags(getText("tags")),
   };
+}
+
+function parseTags(text: string): string[] {
+  return text
+    .split(/[,\n;]/)
+    .map((t) => t.replace(/^[-*•\d.)\s]+/, "").trim())
+    .filter((t) => t.length > 0 && t.length <= 30)
+    .slice(0, 5);
 }
 
 function parseSpeaking(text: string): { q1: string; a1: string; q2: string; a2: string } {
