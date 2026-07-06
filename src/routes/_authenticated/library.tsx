@@ -68,7 +68,7 @@ function LibraryPage() {
   }
 
   function toggleReview() {
-    navigate({ search: (prev) => ({ ...prev, review: reviewOnly ? undefined : "1" }) });
+    navigate({ search: (prev: { review?: "1" }) => ({ ...prev, review: reviewOnly ? undefined : "1" }) });
   }
 
   async function deleteCard(id: string) {
