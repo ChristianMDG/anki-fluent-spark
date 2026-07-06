@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Book, Plus, Check, Trash2, Volume2, ChevronDown } from "lucide-react";
+import { Book, Plus, Check, Trash2, Volume2, ChevronDown, AlertTriangle, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { grammarToHtml, examplesToHtml, clozeToHtml } from "@/lib/parse-card";
 import { toast } from "sonner";
@@ -18,7 +18,11 @@ export interface CardRow {
   examples: string | null;
   cloze: string | null;
   exported: boolean;
+  tags: string[] | null;
+  needs_review: boolean;
 }
+
+const SUGGESTED_TAGS = ["Entretien", "Quotidien", "Tech", "Voyage", "Académique"];
 
 function speak(text: string) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -41,11 +45,13 @@ export function VocabCard({
   const [openLesson, setOpenLesson] = useState(false);
   const [exported, setExported] = useState(card.exported);
   const [expanded, setExpanded] = useState(!compact);
+  const [tags, setTags] = useState<string[]>(card.tags ?? []);
+  const [needsReview, setNeedsReview] = useState(card.needs_review);
+  const [newTag, setNewTag] = useState("");
   const qc = useQueryClient();
 
   async function toggleExport() {
-    const next = !exported ? false : true; // preserve prior semantic (see history)
-    const nextExportedValue = exported ? false : true;
+    const nextExportedValue = !exported;
     setExported(nextExportedValue);
     const { error } = await supabase
       .from("cards")
@@ -56,8 +62,40 @@ export function VocabCard({
       return toast.error(error.message);
     }
     qc.invalidateQueries({ queryKey: ["cards"] });
-    toast.success(!nextExportedValue ? "Added to export queue" : "Removed from queue");
-    void next;
+    toast.success(nextExportedValue ? "Removed from queue" : "Added to export queue");
+  }
+
+  async function persistTags(next: string[]) {
+    const prev = tags;
+    setTags(next);
+    const { error } = await supabase.from("cards").update({ tags: next }).eq("id", card.id);
+    if (error) {
+      setTags(prev);
+      return toast.error(error.message);
+    }
+    qc.invalidateQueries({ queryKey: ["cards"] });
+  }
+
+  function toggleTag(t: string) {
+    const clean = t.trim();
+    if (!clean) return;
+    if (tags.includes(clean)) persistTags(tags.filter((x) => x !== clean));
+    else persistTags([...tags, clean]);
+  }
+
+  async function markReviewed() {
+    setNeedsReview(false);
+    const { error } = await supabase
+      .from("cards")
+      .update({ needs_review: false })
+      .eq("id", card.id);
+    if (error) {
+      setNeedsReview(true);
+      return toast.error(error.message);
+    }
+    qc.invalidateQueries({ queryKey: ["cards"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+    toast.success("Marked as reviewed");
   }
 
   const showBody = expanded || !compact;
@@ -65,10 +103,19 @@ export function VocabCard({
   return (
     <>
       <article
-        className={`glass-panel p-5 md:p-7 space-y-4 group ${
+        className={`glass-panel p-5 md:p-7 space-y-4 group relative ${
           compact ? "hover:border-[color:var(--color-crimson-glow)]/60" : "animate-in fade-in zoom-in-95 duration-300"
-        }`}
+        } ${needsReview ? "!border-amber-500/50 shadow-[0_0_0_1px_rgba(245,158,11,0.15)]" : ""}`}
       >
+        {needsReview && (
+          <div
+            title="Needs review"
+            className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-0.5 text-[10px] label-mono z-[1]"
+          >
+            <AlertTriangle size={11} /> À revoir
+          </div>
+        )}
+
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -95,6 +142,18 @@ export function VocabCard({
               {card.ipa && <span className="font-mono">{card.ipa}</span>}
               {card.pos && <span>· {card.pos}</span>}
             </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-[color:var(--color-crimson)]/20 text-[color:var(--color-cream)]/90 border border-[color:var(--color-crimson)]/30"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {compact && (
@@ -171,6 +230,14 @@ export function VocabCard({
             {!exported ? <Check size={14} /> : <Plus size={14} />}
             {!exported ? "Queued" : "Add to export"}
           </button>
+          {needsReview && (
+            <button
+              onClick={markReviewed}
+              className="rounded-lg px-3 py-2 text-sm flex items-center gap-1.5 border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition"
+            >
+              <Check size={14} /> Marquer révisé
+            </button>
+          )}
           {onDelete && (
             <button
               onClick={onDelete}
@@ -181,6 +248,61 @@ export function VocabCard({
             </button>
           )}
         </div>
+
+        {!compact && (
+          <div className="pt-3 border-t border-[color:var(--color-border)] space-y-2">
+            <p className="label-mono">Tags</p>
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[color:var(--color-crimson)]/25 border border-[color:var(--color-crimson)]/40"
+                >
+                  {t}
+                  <button
+                    onClick={() => toggleTag(t)}
+                    className="hover:text-red-300"
+                    aria-label={`Remove ${t}`}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+              {SUGGESTED_TAGS.filter((s) => !tags.includes(s)).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => toggleTag(s)}
+                  className="text-xs px-2 py-1 rounded-full border border-dashed border-[color:var(--color-border)] text-muted-foreground hover:text-foreground hover:border-[color:var(--color-crimson-glow)] transition"
+                >
+                  + {s}
+                </button>
+              ))}
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newTag.trim()) return;
+                toggleTag(newTag);
+                setNewTag("");
+              }}
+              className="flex gap-1 pt-1"
+            >
+              <input
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                placeholder="Ajouter un tag…"
+                className="flex-1 glass-panel-soft text-xs px-2.5 py-1.5 rounded-md focus:outline-none focus:ring-1 focus:ring-[color:var(--color-crimson-glow)]"
+                maxLength={30}
+              />
+              <button
+                type="submit"
+                className="px-2.5 py-1.5 rounded-md bg-[color:var(--color-crimson)]/30 hover:bg-[color:var(--color-crimson)]/50 text-xs"
+              >
+                <Plus size={13} />
+              </button>
+            </form>
+          </div>
+        )}
       </article>
 
       {openLesson && (
@@ -189,6 +311,8 @@ export function VocabCard({
           word={card.word}
           ipa={card.ipa ?? ""}
           level={card.level ?? ""}
+          initialNeedsReview={needsReview}
+          onReviewChange={setNeedsReview}
           onClose={() => setOpenLesson(false)}
         />
       )}
