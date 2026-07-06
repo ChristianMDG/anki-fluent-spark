@@ -355,17 +355,17 @@ function Section({
   );
 }
 
-function Quiz({ quiz }: { quiz: FullLesson["quiz"] }) {
+function Quiz({ quiz, onWrong }: { quiz: FullLesson["quiz"]; onWrong?: () => void }) {
   return (
     <div className="space-y-5">
       {quiz?.map((q, i) => (
-        <QuizItem key={i} q={q} />
+        <QuizItem key={i} q={q} onWrong={onWrong} />
       ))}
     </div>
   );
 }
 
-function QuizItem({ q }: { q: FullLesson["quiz"][number] }) {
+function QuizItem({ q, onWrong }: { q: FullLesson["quiz"][number]; onWrong?: () => void }) {
   const [picked, setPicked] = useState<number | null>(null);
   return (
     <div>
@@ -378,7 +378,10 @@ function QuizItem({ q }: { q: FullLesson["quiz"][number] }) {
             <button
               key={i}
               disabled={revealed}
-              onClick={() => setPicked(i)}
+              onClick={() => {
+                setPicked(i);
+                if (i !== q.correctIndex) onWrong?.();
+              }}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition ${
                 revealed
                   ? isCorrect
