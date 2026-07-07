@@ -107,6 +107,89 @@ export type Database = {
         }
         Relationships: []
       }
+      fluency_recordings: {
+        Row: {
+          confidence_rating: number | null
+          created_at: string
+          duration_seconds: number
+          exercise_type: string
+          fluency_rating: number | null
+          hesitation_rating: number | null
+          id: string
+          pinned: boolean
+          prompt_text: string
+          session_id: string | null
+          storage_path: string | null
+          user_id: string
+          week_theme: string
+        }
+        Insert: {
+          confidence_rating?: number | null
+          created_at?: string
+          duration_seconds?: number
+          exercise_type: string
+          fluency_rating?: number | null
+          hesitation_rating?: number | null
+          id?: string
+          pinned?: boolean
+          prompt_text?: string
+          session_id?: string | null
+          storage_path?: string | null
+          user_id: string
+          week_theme?: string
+        }
+        Update: {
+          confidence_rating?: number | null
+          created_at?: string
+          duration_seconds?: number
+          exercise_type?: string
+          fluency_rating?: number | null
+          hesitation_rating?: number | null
+          id?: string
+          pinned?: boolean
+          prompt_text?: string
+          session_id?: string | null
+          storage_path?: string | null
+          user_id?: string
+          week_theme?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fluency_recordings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "fluency_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fluency_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          session_length: string
+          user_id: string
+          week_theme: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          session_length: string
+          user_id: string
+          week_theme?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          session_length?: string
+          user_id?: string
+          week_theme?: string
+        }
+        Relationships: []
+      }
       lessons: {
         Row: {
           card_id: string
