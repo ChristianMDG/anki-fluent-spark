@@ -45,6 +45,8 @@ function HomePage() {
 
       <DailyGoalCard />
 
+      <ListenVsProduceCard />
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard label="Words generated" value={stats.data?.cards ?? 0} />
         <StatCard label="Lessons opened" value={stats.data?.lessons ?? 0} />
