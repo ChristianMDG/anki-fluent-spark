@@ -157,6 +157,7 @@ function FluencyJournal() {
             <option value="free_talk">Free Talk</option>
             <option value="chunk_repeat">Chunk Repeat</option>
             <option value="dialogue">Dialogue</option>
+            <option value="retell">🔁 Retell</option>
           </select>
         </div>
         <div>
