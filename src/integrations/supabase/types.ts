@@ -169,6 +169,7 @@ export type Database = {
           created_at: string
           id: string
           session_length: string
+          source_video_id: string | null
           user_id: string
           week_theme: string
         }
@@ -177,6 +178,7 @@ export type Database = {
           created_at?: string
           id?: string
           session_length: string
+          source_video_id?: string | null
           user_id: string
           week_theme?: string
         }
@@ -185,10 +187,19 @@ export type Database = {
           created_at?: string
           id?: string
           session_length?: string
+          source_video_id?: string | null
           user_id?: string
           week_theme?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fluency_sessions_source_video_id_fkey"
+            columns: ["source_video_id"]
+            isOneToOne: false
+            referencedRelation: "shadowing_videos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       lessons: {
         Row: {
@@ -272,33 +283,42 @@ export type Database = {
           created_at: string
           duration_seconds: number | null
           id: string
+          last_watched_at: string | null
+          retell_skipped_count: number
           source_type: string
           storage_path: string | null
           thumbnail_url: string | null
           title: string | null
           user_id: string
+          watch_duration_seconds: number
           youtube_id: string | null
         }
         Insert: {
           created_at?: string
           duration_seconds?: number | null
           id?: string
+          last_watched_at?: string | null
+          retell_skipped_count?: number
           source_type: string
           storage_path?: string | null
           thumbnail_url?: string | null
           title?: string | null
           user_id: string
+          watch_duration_seconds?: number
           youtube_id?: string | null
         }
         Update: {
           created_at?: string
           duration_seconds?: number | null
           id?: string
+          last_watched_at?: string | null
+          retell_skipped_count?: number
           source_type?: string
           storage_path?: string | null
           thumbnail_url?: string | null
           title?: string | null
           user_id?: string
+          watch_duration_seconds?: number
           youtube_id?: string | null
         }
         Relationships: []
