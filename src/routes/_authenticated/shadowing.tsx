@@ -580,9 +580,24 @@ function ShadowingPage() {
         {/* Notes column */}
         <NotesPanel videoId={currentVideo?.id ?? null} />
       </div>
+
+      <RetellItModal
+        open={retellOpen}
+        video={retellVideo}
+        watchedSeconds={retellWatched}
+        notes={retellNotes}
+        onClose={() => setRetellOpen(false)}
+        onSkip={handleSkipRetell}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ["fluency-streak"] });
+          qc.invalidateQueries({ queryKey: ["fluency-journal"] });
+          qc.invalidateQueries({ queryKey: ["listen-vs-produce"] });
+        }}
+      />
     </div>
   );
 }
+
 
 function NotesPanel({ videoId }: { videoId: string | null }) {
   const qc = useQueryClient();
