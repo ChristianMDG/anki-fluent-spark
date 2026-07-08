@@ -157,6 +157,7 @@ function FluencyJournal() {
             <option value="free_talk">Free Talk</option>
             <option value="chunk_repeat">Chunk Repeat</option>
             <option value="dialogue">Dialogue</option>
+            <option value="retell">🔁 Retell</option>
           </select>
         </div>
         <div>
@@ -309,6 +310,7 @@ function RatingBar({
 }
 
 function labelType(t: string) {
+  if (t === "retell") return "🔁 Retell";
   return t === "free_talk" ? "Free Talk" : t === "chunk_repeat" ? "Chunk Repeat" : "Dialogue";
 }
 

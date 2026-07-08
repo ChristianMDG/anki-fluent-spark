@@ -1,16 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
-import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2 } from "lucide-react";
+import {
+  Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2,
+  CheckCircle2, Info,
+} from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
+import { RetellItModal } from "@/components/RetellItModal";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
 });
+
+const SKIP_BANNER_KEY = "retell-skip-banner-dismissed-at";
 
 interface VideoRow {
   id: string;
@@ -20,6 +26,8 @@ interface VideoRow {
   title: string;
   thumbnail_url: string;
   created_at: string;
+  watch_duration_seconds?: number;
+  retell_skipped_count?: number;
 }
 
 interface NoteRow {
@@ -52,6 +60,45 @@ function ShadowingPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const ytPlayerRef = useRef<HTMLIFrameElement>(null);
 
+  // Watch tracking (session-scoped)
+  const [sessionStartAt, setSessionStartAt] = useState<string | null>(null);
+  const [sessionWatched, setSessionWatched] = useState(0);
+  const cumulRef = useRef(0);
+  const playingRef = useRef(false);
+  const [retellOpen, setRetellOpen] = useState(false);
+  const [retellVideo, setRetellVideo] = useState<VideoRow | null>(null);
+  const [retellNotes, setRetellNotes] = useState<{ id: string; word: string }[]>([]);
+  const [retellWatched, setRetellWatched] = useState(0);
+  const [bannerDismissed, setBannerDismissed] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(SKIP_BANNER_KEY);
+    if (!raw) return setBannerDismissed(false);
+    const ts = Number(raw);
+    if (!Number.isFinite(ts)) return setBannerDismissed(false);
+    setBannerDismissed(Date.now() - ts < 3 * 24 * 60 * 60 * 1000);
+  }, []);
+
+  const skipSum = useQuery({
+    queryKey: ["retell-skip-sum-7d"],
+    queryFn: async () => {
+      const since = new Date();
+      since.setDate(since.getDate() - 7);
+      const { data } = await supabase
+        .from("shadowing_videos")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .select("retell_skipped_count,last_watched_at" as any)
+        .gte("last_watched_at", since.toISOString());
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).reduce(
+        (s, r) => s + (Number(r.retell_skipped_count) || 0),
+        0,
+      );
+    },
+    staleTime: 60_000,
+  });
+
   const videos = useQuery({
     queryKey: ["shadowing_videos", "list"],
     queryFn: async () => {
@@ -64,6 +111,155 @@ function ShadowingPage() {
       return data as VideoRow[];
     },
   });
+
+  // Reset session tracking when video changes
+  useEffect(() => {
+    if (!currentVideo) {
+      setSessionStartAt(null);
+      setSessionWatched(0);
+      cumulRef.current = 0;
+      playingRef.current = false;
+      return;
+    }
+    setSessionStartAt(new Date().toISOString());
+    setSessionWatched(0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cumulRef.current = Number((currentVideo as any).watch_duration_seconds) || 0;
+    playingRef.current = false;
+  }, [currentVideo?.id]);
+
+  // YouTube: enable postMessage events and track playerState
+  useEffect(() => {
+    if (!currentVideo || currentVideo.source_type !== "youtube") return;
+    const iframe = ytPlayerRef.current;
+    if (!iframe) return;
+    const send = () => {
+      iframe.contentWindow?.postMessage(
+        JSON.stringify({ event: "listening", id: "shadowing" }),
+        "*",
+      );
+    };
+    // send after load
+    const t = setTimeout(send, 400);
+    const onLoad = () => send();
+    iframe.addEventListener("load", onLoad);
+    const onMsg = (e: MessageEvent) => {
+      try {
+        const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        if (d?.info?.playerState !== undefined) {
+          playingRef.current = d.info.playerState === 1;
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => {
+      clearTimeout(t);
+      iframe.removeEventListener("load", onLoad);
+      window.removeEventListener("message", onMsg);
+    };
+  }, [currentVideo?.id, currentVideo?.source_type]);
+
+  // Upload: watch play/pause on <video>
+  useEffect(() => {
+    if (!currentVideo || currentVideo.source_type !== "upload") return;
+    const el = videoRef.current;
+    if (!el) return;
+    const onPlay = () => (playingRef.current = true);
+    const onPause = () => (playingRef.current = false);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("playing", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("ended", onPause);
+    return () => {
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("playing", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("ended", onPause);
+    };
+  }, [currentVideo?.id, uploadedUrl]);
+
+  // Tick every 10s: if playing, add to cumul and persist
+  useEffect(() => {
+    if (!currentVideo) return;
+    const vid = currentVideo;
+    const interval = setInterval(async () => {
+      if (!playingRef.current) return;
+      cumulRef.current += 10;
+      setSessionWatched((s) => s + 10);
+      try {
+        await supabase
+          .from("shadowing_videos")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .update({
+            watch_duration_seconds: cumulRef.current,
+            last_watched_at: new Date().toISOString(),
+          } as any)
+          .eq("id", vid.id);
+      } catch {
+        /* ignore */
+      }
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [currentVideo?.id]);
+
+  const openRetellFor = useCallback(
+    async (v: VideoRow, watched: number, startedAt: string | null) => {
+      let notesList: { id: string; word: string }[] = [];
+      if (startedAt) {
+        const { data } = await supabase
+          .from("shadowing_notes")
+          .select("id,word")
+          .eq("video_id", v.id)
+          .gte("created_at", startedAt);
+        notesList = (data ?? []) as { id: string; word: string }[];
+      }
+      setRetellVideo(v);
+      setRetellWatched(watched);
+      setRetellNotes(notesList);
+      setRetellOpen(true);
+    },
+    [],
+  );
+
+  const maybeOfferRetell = useCallback(async () => {
+    if (!currentVideo) return;
+    if (sessionWatched < 90) return;
+    await openRetellFor(currentVideo, sessionWatched, sessionStartAt);
+  }, [currentVideo, sessionWatched, sessionStartAt, openRetellFor]);
+
+  async function handleSkipRetell() {
+    if (!retellVideo) return;
+    try {
+      const { data } = await supabase
+        .from("shadowing_videos")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .select("retell_skipped_count" as any)
+        .eq("id", retellVideo.id)
+        .single();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cur = Number((data as any)?.retell_skipped_count) || 0;
+      await supabase
+        .from("shadowing_videos")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .update({ retell_skipped_count: cur + 1 } as any)
+        .eq("id", retellVideo.id);
+      qc.invalidateQueries({ queryKey: ["retell-skip-sum-7d"] });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function dismissBanner() {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SKIP_BANNER_KEY, String(Date.now()));
+    }
+    setBannerDismissed(true);
+  }
+
+  const showSkipBanner = !bannerDismissed && (skipSum.data ?? 0) > 3;
+
 
   async function loadYoutube() {
     const id = extractYouTubeId(ytUrl.trim());
@@ -199,6 +395,21 @@ function ShadowingPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto space-y-6">
+      {showSkipBanner && (
+        <div className="glass-panel-soft rounded-lg px-4 py-3 flex items-start gap-3 text-sm border border-amber-500/30">
+          <Info size={16} className="text-amber-400 mt-0.5 shrink-0" />
+          <p className="flex-1 text-muted-foreground">
+            Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la fluidité.
+          </p>
+          <button
+            onClick={dismissBanner}
+            className="text-muted-foreground hover:text-foreground p-1 -m-1"
+            aria-label="Fermer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <p className="label-mono text-[color:var(--color-gold)]">Shadowing</p>
@@ -211,6 +422,7 @@ function ShadowingPage() {
           View full history →
         </Link>
       </div>
+
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-6">
         {/* Video column */}
@@ -304,8 +516,23 @@ function ShadowingPage() {
               <p className="text-sm text-muted-foreground text-center truncate">
                 {currentVideo.title}
               </p>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--color-border)]">
+                <p className="label-mono">
+                  Session : {Math.floor(sessionWatched / 60)}:
+                  {(sessionWatched % 60).toString().padStart(2, "0")}
+                </p>
+                <button
+                  onClick={maybeOfferRetell}
+                  className="rounded-lg px-3 py-1.5 text-sm border border-[color:var(--color-crimson-glow)] hover:bg-[color:var(--color-crimson)]/15 flex items-center gap-2 disabled:opacity-40"
+                  disabled={sessionWatched < 90}
+                  title={sessionWatched < 90 ? "Regarde au moins 90s pour proposer Retell it" : ""}
+                >
+                  <CheckCircle2 size={14} /> Terminer la session
+                </button>
+              </div>
             </div>
           )}
+
 
           {/* History strip */}
           <div>
@@ -353,9 +580,24 @@ function ShadowingPage() {
         {/* Notes column */}
         <NotesPanel videoId={currentVideo?.id ?? null} />
       </div>
+
+      <RetellItModal
+        open={retellOpen}
+        video={retellVideo}
+        watchedSeconds={retellWatched}
+        notes={retellNotes}
+        onClose={() => setRetellOpen(false)}
+        onSkip={handleSkipRetell}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ["fluency-streak"] });
+          qc.invalidateQueries({ queryKey: ["fluency-journal"] });
+          qc.invalidateQueries({ queryKey: ["listen-vs-produce"] });
+        }}
+      />
     </div>
   );
 }
+
 
 function NotesPanel({ videoId }: { videoId: string | null }) {
   const qc = useQueryClient();

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles, Video, AlertTriangle, Library } from "lucide-react";
 import { DailyGoalCard } from "@/components/DailyGoalCard";
+import { ListenVsProduceCard } from "@/components/ListenVsProduceCard";
 
 export const Route = createFileRoute("/_authenticated/home")({
   component: HomePage,
@@ -43,6 +44,8 @@ function HomePage() {
       </div>
 
       <DailyGoalCard />
+
+      <ListenVsProduceCard />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard label="Words generated" value={stats.data?.cards ?? 0} />
