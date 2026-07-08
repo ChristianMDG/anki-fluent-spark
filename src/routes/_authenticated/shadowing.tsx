@@ -1,16 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
-import { Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2 } from "lucide-react";
+import {
+  Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2,
+  CheckCircle2, Info,
+} from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
+import { RetellItModal } from "@/components/RetellItModal";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
 });
+
+const SKIP_BANNER_KEY = "retell-skip-banner-dismissed-at";
 
 interface VideoRow {
   id: string;
