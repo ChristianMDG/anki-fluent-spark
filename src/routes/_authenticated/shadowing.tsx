@@ -26,6 +26,8 @@ interface VideoRow {
   title: string;
   thumbnail_url: string;
   created_at: string;
+  watch_duration_seconds?: number;
+  retell_skipped_count?: number;
 }
 
 interface NoteRow {
