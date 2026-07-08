@@ -310,6 +310,7 @@ function RatingBar({
 }
 
 function labelType(t: string) {
+  if (t === "retell") return "🔁 Retell";
   return t === "free_talk" ? "Free Talk" : t === "chunk_repeat" ? "Chunk Repeat" : "Dialogue";
 }
 
