@@ -395,6 +395,21 @@ function ShadowingPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto space-y-6">
+      {showSkipBanner && (
+        <div className="glass-panel-soft rounded-lg px-4 py-3 flex items-start gap-3 text-sm border border-amber-500/30">
+          <Info size={16} className="text-amber-400 mt-0.5 shrink-0" />
+          <p className="flex-1 text-muted-foreground">
+            Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la fluidité.
+          </p>
+          <button
+            onClick={dismissBanner}
+            className="text-muted-foreground hover:text-foreground p-1 -m-1"
+            aria-label="Fermer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <p className="label-mono text-[color:var(--color-gold)]">Shadowing</p>
@@ -407,6 +422,7 @@ function ShadowingPage() {
           View full history →
         </Link>
       </div>
+
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-6">
         {/* Video column */}
