@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles, Video, AlertTriangle, Library } from "lucide-react";
 import { DailyGoalCard } from "@/components/DailyGoalCard";
+import { ListenVsProduceCard } from "@/components/ListenVsProduceCard";
 
 export const Route = createFileRoute("/_authenticated/home")({
   component: HomePage,
