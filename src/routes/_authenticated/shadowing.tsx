@@ -516,8 +516,23 @@ function ShadowingPage() {
               <p className="text-sm text-muted-foreground text-center truncate">
                 {currentVideo.title}
               </p>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--color-border)]">
+                <p className="label-mono">
+                  Session : {Math.floor(sessionWatched / 60)}:
+                  {(sessionWatched % 60).toString().padStart(2, "0")}
+                </p>
+                <button
+                  onClick={maybeOfferRetell}
+                  className="rounded-lg px-3 py-1.5 text-sm border border-[color:var(--color-crimson-glow)] hover:bg-[color:var(--color-crimson)]/15 flex items-center gap-2 disabled:opacity-40"
+                  disabled={sessionWatched < 90}
+                  title={sessionWatched < 90 ? "Regarde au moins 90s pour proposer Retell it" : ""}
+                >
+                  <CheckCircle2 size={14} /> Terminer la session
+                </button>
+              </div>
             </div>
           )}
+
 
           {/* History strip */}
           <div>
