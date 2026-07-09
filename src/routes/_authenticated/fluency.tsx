@@ -9,10 +9,18 @@ import {
   SESSION_CONFIG,
   type SessionLength,
 } from "@/lib/fluency-themes";
-import { Mic, Square, RotateCcw, Pin, BookOpen, Volume2, Flame, ChevronRight } from "lucide-react";
+import {
+  SITUATION_META,
+  COMPLEXITY_META,
+  type JourneySituation,
+} from "@/lib/journey";
+import { z } from "zod";
+import { Mic, Square, RotateCcw, Pin, BookOpen, Volume2, Flame, ChevronRight, Compass } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fluency")({
+  validateSearch: (s: Record<string, unknown>) =>
+    z.object({ journeyCell: z.string().uuid().optional() }).parse(s),
   component: FluencyPage,
 });
 
@@ -35,6 +43,8 @@ interface RecordingState {
 }
 
 function FluencyPage() {
+  const search = Route.useSearch();
+  const journeyCellId = search.journeyCell;
   const theme = useMemo(() => currentTheme(), []);
   const [phase, setPhase] = useState<"entry" | "session" | "summary">("entry");
   const [length, setLength] = useState<SessionLength>("standard");
@@ -45,11 +55,54 @@ function FluencyPage() {
 
   const streak = useFluencyStreak();
   const genPrompt = useServerFn(generateFluencyPrompt);
+  const qc = useQueryClient();
+
+  const { data: cell } = useQuery({
+    queryKey: ["journey-cell", journeyCellId],
+    enabled: !!journeyCellId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("journey_cells")
+        .select("*")
+        .eq("id", journeyCellId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  async function pickVocabWords(situation: JourneySituation | null): Promise<string[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+    let words: string[] = [];
+    if (situation) {
+      const { data } = await supabase
+        .from("cards")
+        .select("word")
+        .contains("tags", [situation])
+        .limit(20);
+      words = (data ?? []).map((r) => r.word);
+    }
+    if (words.length < 3) {
+      const { data } = await supabase
+        .from("cards")
+        .select("word")
+        .order("created_at", { ascending: false })
+        .limit(40);
+      const extras = (data ?? []).map((r) => r.word).filter((w) => !words.includes(w));
+      words = [...words, ...extras];
+    }
+    return shuffle(words).slice(0, Math.min(3, words.length));
+  }
 
   async function buildExercises(count: number): Promise<Exercise[]> {
-    // rotate types: free_talk, chunk_repeat, dialogue
     const order: ExerciseType[] = ["free_talk", "chunk_repeat", "dialogue"];
     const chunks = await loadChunksPool();
+    const situation = (cell?.situation ?? null) as JourneySituation | null;
+    const complexityLevel = cell?.complexity_level ?? undefined;
+    const vocab = cell ? await pickVocabWords(situation) : [];
     const out: Exercise[] = [];
     for (let i = 0; i < count; i++) {
       const type = order[i % order.length];
@@ -66,7 +119,13 @@ function FluencyPage() {
       } else {
         try {
           const { prompt } = await genPrompt({
-            data: { type, weekTheme: theme.title },
+            data: {
+              type,
+              weekTheme: theme.title,
+              ...(situation ? { situation } : {}),
+              ...(complexityLevel ? { complexityLevel } : {}),
+              ...(vocab.length ? { vocabularyWords: vocab } : {}),
+            },
           });
           out.push({ type, prompt });
         } catch (e) {
@@ -95,7 +154,10 @@ function FluencyPage() {
         .insert({
           user_id: user.id,
           session_length: length,
-          week_theme: theme.title,
+          week_theme: cell
+            ? `${SITUATION_META[cell.situation as JourneySituation].label} · ${COMPLEXITY_META[cell.complexity_level].label}`
+            : theme.title,
+          journey_cell_id: journeyCellId ?? null,
         })
         .select()
         .single();
@@ -120,6 +182,14 @@ function FluencyPage() {
         .update({ completed_at: new Date().toISOString() })
         .eq("id", sessionId);
     }
+    if (cell) {
+      await supabase
+        .from("journey_cells")
+        .update({ sessions_completed: (cell.sessions_completed ?? 0) + 1 })
+        .eq("id", cell.id);
+      qc.invalidateQueries({ queryKey: ["journey-cells"] });
+      qc.invalidateQueries({ queryKey: ["journey-cell", cell.id] });
+    }
     setPhase("summary");
   }
 
@@ -132,6 +202,15 @@ function FluencyPage() {
         onStart={() => startSession.mutate()}
         starting={startSession.isPending}
         streak={streak.data ?? 0}
+        journeyCell={
+          cell
+            ? {
+                situation: cell.situation as JourneySituation,
+                complexityLevel: cell.complexity_level,
+                sessionsCompleted: cell.sessions_completed ?? 0,
+              }
+            : null
+        }
       />
     );
   }
@@ -207,6 +286,7 @@ function FluencyEntry({
   onStart,
   starting,
   streak,
+  journeyCell,
 }: {
   theme: { title: string; description: string };
   length: SessionLength;
@@ -214,8 +294,15 @@ function FluencyEntry({
   onStart: () => void;
   starting: boolean;
   streak: number;
+  journeyCell: {
+    situation: JourneySituation;
+    complexityLevel: number;
+    sessionsCompleted: number;
+  } | null;
 }) {
   useCleanupExpired();
+  const sit = journeyCell ? SITUATION_META[journeyCell.situation] : null;
+  const cx = journeyCell ? COMPLEXITY_META[journeyCell.complexityLevel] : null;
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -243,11 +330,30 @@ function FluencyEntry({
         </div>
       </div>
 
-      <div className="glass-panel p-6 md:p-8">
-        <p className="label-mono">Thème de la semaine</p>
-        <h2 className="text-2xl font-bold mt-1 text-[color:var(--color-gold)]">{theme.title}</h2>
-        <p className="text-muted-foreground mt-2">{theme.description}</p>
-      </div>
+      {journeyCell && sit && cx ? (
+        <div className="glass-panel p-6 md:p-8 border-[color:var(--color-crimson-glow)]">
+          <div className="flex items-center gap-2 label-mono text-[color:var(--color-crimson-glow)]">
+            <Compass size={14} /> Parcours · {sit.icon} {sit.label} — {cx.label}
+          </div>
+          <h2 className="text-2xl font-bold mt-2">{cx.description}</h2>
+          <p className="text-muted-foreground mt-2">{sit.description}</p>
+          <p className="text-sm text-muted-foreground mt-3">
+            Progression : {journeyCell.sessionsCompleted}/5 sessions. Le vocabulaire déjà appris sera intégré aux exercices.
+          </p>
+          <Link
+            to="/parcours"
+            className="mt-3 inline-block text-xs text-muted-foreground underline hover:text-foreground"
+          >
+            ← Retour au Parcours
+          </Link>
+        </div>
+      ) : (
+        <div className="glass-panel p-6 md:p-8">
+          <p className="label-mono">Thème de la semaine</p>
+          <h2 className="text-2xl font-bold mt-1 text-[color:var(--color-gold)]">{theme.title}</h2>
+          <p className="text-muted-foreground mt-2">{theme.description}</p>
+        </div>
+      )}
 
       <div>
         <p className="label-mono mb-3">Durée de la session</p>
