@@ -168,6 +168,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           id: string
+          journey_cell_id: string | null
           session_length: string
           source_video_id: string | null
           user_id: string
@@ -177,6 +178,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           id?: string
+          journey_cell_id?: string | null
           session_length: string
           source_video_id?: string | null
           user_id: string
@@ -186,12 +188,20 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           id?: string
+          journey_cell_id?: string | null
           session_length?: string
           source_video_id?: string | null
           user_id?: string
           week_theme?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fluency_sessions_journey_cell_id_fkey"
+            columns: ["journey_cell_id"]
+            isOneToOne: false
+            referencedRelation: "journey_cells"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fluency_sessions_source_video_id_fkey"
             columns: ["source_video_id"]
@@ -200,6 +210,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      journey_cells: {
+        Row: {
+          complexity_level: number
+          created_at: string
+          id: string
+          sessions_completed: number
+          situation: Database["public"]["Enums"]["journey_situation"]
+          status: Database["public"]["Enums"]["journey_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          complexity_level: number
+          created_at?: string
+          id?: string
+          sessions_completed?: number
+          situation: Database["public"]["Enums"]["journey_situation"]
+          status?: Database["public"]["Enums"]["journey_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          complexity_level?: number
+          created_at?: string
+          id?: string
+          sessions_completed?: number
+          situation?: Database["public"]["Enums"]["journey_situation"]
+          status?: Database["public"]["Enums"]["journey_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       lessons: {
         Row: {
@@ -328,10 +371,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ensure_journey_cells: { Args: { _user: string }; Returns: undefined }
+      recompute_journey_status: { Args: { _user: string }; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      journey_situation:
+        | "social"
+        | "transactional"
+        | "professional"
+        | "emotional"
+        | "narrative"
+      journey_status: "locked" | "available" | "in_progress" | "mastered"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -458,6 +508,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      journey_situation: [
+        "social",
+        "transactional",
+        "professional",
+        "emotional",
+        "narrative",
+      ],
+      journey_status: ["locked", "available", "in_progress", "mastered"],
+    },
   },
 } as const
