@@ -9,10 +9,18 @@ import {
   SESSION_CONFIG,
   type SessionLength,
 } from "@/lib/fluency-themes";
-import { Mic, Square, RotateCcw, Pin, BookOpen, Volume2, Flame, ChevronRight } from "lucide-react";
+import {
+  SITUATION_META,
+  COMPLEXITY_META,
+  type JourneySituation,
+} from "@/lib/journey";
+import { z } from "zod";
+import { Mic, Square, RotateCcw, Pin, BookOpen, Volume2, Flame, ChevronRight, Compass } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fluency")({
+  validateSearch: (s: Record<string, unknown>) =>
+    z.object({ journeyCell: z.string().uuid().optional() }).parse(s),
   component: FluencyPage,
 });
 
