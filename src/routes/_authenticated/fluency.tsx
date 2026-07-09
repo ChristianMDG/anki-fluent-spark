@@ -286,6 +286,7 @@ function FluencyEntry({
   onStart,
   starting,
   streak,
+  journeyCell,
 }: {
   theme: { title: string; description: string };
   length: SessionLength;
@@ -293,8 +294,15 @@ function FluencyEntry({
   onStart: () => void;
   starting: boolean;
   streak: number;
+  journeyCell: {
+    situation: JourneySituation;
+    complexityLevel: number;
+    sessionsCompleted: number;
+  } | null;
 }) {
   useCleanupExpired();
+  const sit = journeyCell ? SITUATION_META[journeyCell.situation] : null;
+  const cx = journeyCell ? COMPLEXITY_META[journeyCell.complexityLevel] : null;
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -322,11 +330,30 @@ function FluencyEntry({
         </div>
       </div>
 
-      <div className="glass-panel p-6 md:p-8">
-        <p className="label-mono">Thème de la semaine</p>
-        <h2 className="text-2xl font-bold mt-1 text-[color:var(--color-gold)]">{theme.title}</h2>
-        <p className="text-muted-foreground mt-2">{theme.description}</p>
-      </div>
+      {journeyCell && sit && cx ? (
+        <div className="glass-panel p-6 md:p-8 border-[color:var(--color-crimson-glow)]">
+          <div className="flex items-center gap-2 label-mono text-[color:var(--color-crimson-glow)]">
+            <Compass size={14} /> Parcours · {sit.icon} {sit.label} — {cx.label}
+          </div>
+          <h2 className="text-2xl font-bold mt-2">{cx.description}</h2>
+          <p className="text-muted-foreground mt-2">{sit.description}</p>
+          <p className="text-sm text-muted-foreground mt-3">
+            Progression : {journeyCell.sessionsCompleted}/5 sessions. Le vocabulaire déjà appris sera intégré aux exercices.
+          </p>
+          <Link
+            to="/parcours"
+            className="mt-3 inline-block text-xs text-muted-foreground underline hover:text-foreground"
+          >
+            ← Retour au Parcours
+          </Link>
+        </div>
+      ) : (
+        <div className="glass-panel p-6 md:p-8">
+          <p className="label-mono">Thème de la semaine</p>
+          <h2 className="text-2xl font-bold mt-1 text-[color:var(--color-gold)]">{theme.title}</h2>
+          <p className="text-muted-foreground mt-2">{theme.description}</p>
+        </div>
+      )}
 
       <div>
         <p className="label-mono mb-3">Durée de la session</p>
