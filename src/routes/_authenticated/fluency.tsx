@@ -202,6 +202,15 @@ function FluencyPage() {
         onStart={() => startSession.mutate()}
         starting={startSession.isPending}
         streak={streak.data ?? 0}
+        journeyCell={
+          cell
+            ? {
+                situation: cell.situation as JourneySituation,
+                complexityLevel: cell.complexity_level,
+                sessionsCompleted: cell.sessions_completed ?? 0,
+              }
+            : null
+        }
       />
     );
   }
