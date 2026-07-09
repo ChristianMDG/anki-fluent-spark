@@ -43,6 +43,8 @@ interface RecordingState {
 }
 
 function FluencyPage() {
+  const search = Route.useSearch();
+  const journeyCellId = search.journeyCell;
   const theme = useMemo(() => currentTheme(), []);
   const [phase, setPhase] = useState<"entry" | "session" | "summary">("entry");
   const [length, setLength] = useState<SessionLength>("standard");
@@ -53,11 +55,54 @@ function FluencyPage() {
 
   const streak = useFluencyStreak();
   const genPrompt = useServerFn(generateFluencyPrompt);
+  const qc = useQueryClient();
+
+  const { data: cell } = useQuery({
+    queryKey: ["journey-cell", journeyCellId],
+    enabled: !!journeyCellId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("journey_cells")
+        .select("*")
+        .eq("id", journeyCellId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  async function pickVocabWords(situation: JourneySituation | null): Promise<string[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+    let words: string[] = [];
+    if (situation) {
+      const { data } = await supabase
+        .from("cards")
+        .select("word")
+        .contains("tags", [situation])
+        .limit(20);
+      words = (data ?? []).map((r) => r.word);
+    }
+    if (words.length < 3) {
+      const { data } = await supabase
+        .from("cards")
+        .select("word")
+        .order("created_at", { ascending: false })
+        .limit(40);
+      const extras = (data ?? []).map((r) => r.word).filter((w) => !words.includes(w));
+      words = [...words, ...extras];
+    }
+    return shuffle(words).slice(0, Math.min(3, words.length));
+  }
 
   async function buildExercises(count: number): Promise<Exercise[]> {
-    // rotate types: free_talk, chunk_repeat, dialogue
     const order: ExerciseType[] = ["free_talk", "chunk_repeat", "dialogue"];
     const chunks = await loadChunksPool();
+    const situation = (cell?.situation ?? null) as JourneySituation | null;
+    const complexityLevel = cell?.complexity_level ?? undefined;
+    const vocab = cell ? await pickVocabWords(situation) : [];
     const out: Exercise[] = [];
     for (let i = 0; i < count; i++) {
       const type = order[i % order.length];
@@ -74,7 +119,13 @@ function FluencyPage() {
       } else {
         try {
           const { prompt } = await genPrompt({
-            data: { type, weekTheme: theme.title },
+            data: {
+              type,
+              weekTheme: theme.title,
+              ...(situation ? { situation } : {}),
+              ...(complexityLevel ? { complexityLevel } : {}),
+              ...(vocab.length ? { vocabularyWords: vocab } : {}),
+            },
           });
           out.push({ type, prompt });
         } catch (e) {
@@ -103,7 +154,10 @@ function FluencyPage() {
         .insert({
           user_id: user.id,
           session_length: length,
-          week_theme: theme.title,
+          week_theme: cell
+            ? `${SITUATION_META[cell.situation as JourneySituation].label} · ${COMPLEXITY_META[cell.complexity_level].label}`
+            : theme.title,
+          journey_cell_id: journeyCellId ?? null,
         })
         .select()
         .single();
@@ -127,6 +181,14 @@ function FluencyPage() {
         .from("fluency_sessions")
         .update({ completed_at: new Date().toISOString() })
         .eq("id", sessionId);
+    }
+    if (cell) {
+      await supabase
+        .from("journey_cells")
+        .update({ sessions_completed: (cell.sessions_completed ?? 0) + 1 })
+        .eq("id", cell.id);
+      qc.invalidateQueries({ queryKey: ["journey-cells"] });
+      qc.invalidateQueries({ queryKey: ["journey-cell", cell.id] });
     }
     setPhase("summary");
   }
