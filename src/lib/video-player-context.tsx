@@ -218,9 +218,6 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
   }, [video?.source_type]);
 
   // Reposition loop: mirror slotEl bounds, else mini bottom-right
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const onShadowing = pathname === "/shadowing" || pathname.startsWith("/shadowing/");
-
   useEffect(() => {
     if (!video) return;
     let raf = 0;
