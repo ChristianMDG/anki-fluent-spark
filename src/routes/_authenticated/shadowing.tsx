@@ -592,6 +592,146 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
   );
 }
 
+function NoteItem({
+  note,
+  videoId,
+  onGenerate,
+  onDelete,
+}: {
+  note: NoteRow;
+  videoId: string | null;
+  onGenerate: () => void;
+  onDelete: () => void;
+}) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [wordDraft, setWordDraft] = useState(note.word);
+  const [contextDraft, setContextDraft] = useState(note.context ?? "");
+  const [saving, setSaving] = useState(false);
+
+  function startEdit() {
+    setWordDraft(note.word);
+    setContextDraft(note.context ?? "");
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+  }
+
+  async function saveEdit() {
+    const w = wordDraft.trim();
+    if (!w) return toast.error("Le mot ne peut pas être vide");
+    setSaving(true);
+    const { error } = await supabase
+      .from("shadowing_notes")
+      .update({ word: w, context: contextDraft.trim() || null })
+      .eq("id", note.id);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    if (note.card_id && w !== note.word) {
+      toast.info(
+        `Cette note a déjà une fiche pour "${note.word}" — la modifier ne changera pas la fiche existante.`,
+      );
+    }
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
+  }
+
+  return (
+    <div
+      className={`p-3 rounded-lg border transition ${
+        note.card_id
+          ? "border-emerald-500/40 bg-emerald-950/10"
+          : "border-[color:var(--color-border)]"
+      } ${editing ? "!opacity-100" : note.card_id ? "opacity-70" : ""}`}
+    >
+      {editing ? (
+        <div className="space-y-2">
+          <input
+            autoFocus
+            value={wordDraft}
+            onChange={(e) => setWordDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            className="w-full glass-panel-soft px-2 py-1.5 rounded text-sm font-medium"
+            placeholder="Mot"
+          />
+          <input
+            value={contextDraft}
+            onChange={(e) => setContextDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            className="w-full glass-panel-soft px-2 py-1.5 rounded text-xs"
+            placeholder="Contexte"
+          />
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={saveEdit}
+              disabled={saving}
+              className="p-1.5 hover:bg-white/10 rounded text-emerald-400"
+              aria-label="Valider"
+              title="Valider (Entrée)"
+            >
+              <Check size={14} />
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
+              aria-label="Annuler"
+              title="Annuler (Échap)"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium truncate">{note.word}</p>
+            {note.context && (
+              <p className="text-xs text-muted-foreground mt-0.5">{note.context}</p>
+            )}
+          </div>
+          <div className="flex gap-1 shrink-0">
+            {note.card_id ? (
+              <span className="text-xs text-emerald-400 flex items-center gap-1">
+                <Check size={12} /> Card
+              </span>
+            ) : (
+              <button
+                onClick={onGenerate}
+                title="Generate a card"
+                className="p-1.5 hover:bg-white/10 rounded text-[color:var(--color-gold)]"
+              >
+                <Zap size={14} />
+              </button>
+            )}
+            <button
+              onClick={startEdit}
+              title="Modifier"
+              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              onClick={onDelete}
+              title="Supprimer"
+              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Track current time for YouTube via postMessage listener
 export function useYouTubeTimeTracker() {
   useEffect(() => {
