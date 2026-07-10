@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadTsv } from "@/lib/tsv-export";
 import { toast } from "sonner";
+import { VideoPlayerProvider } from "@/lib/video-player-context";
 
 const NAV = [
   { to: "/home", label: "Home", icon: Home },
