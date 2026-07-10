@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -7,10 +7,11 @@ import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
 import {
   Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2,
-  CheckCircle2, Info,
+  CheckCircle2, Info, Pencil,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
+import { useVideoPlayer, useVideoSlot, type PersistentVideo } from "@/lib/video-player-context";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
