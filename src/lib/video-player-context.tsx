@@ -3,7 +3,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
