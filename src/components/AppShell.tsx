@@ -72,7 +72,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-  return (
     <VideoPlayerProvider>
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="hidden md:flex md:flex-col md:w-56 md:min-h-screen md:sticky md:top-0 glass-panel-soft border-r border-[color:var(--color-border)] p-4 gap-1">
