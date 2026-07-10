@@ -561,42 +561,13 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
 
       <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
         {(notes.data ?? []).map((n) => (
-          <div
+          <NoteItem
             key={n.id}
-            className={`p-3 rounded-lg border transition ${
-              n.card_id
-                ? "border-emerald-500/40 bg-emerald-950/10 opacity-70"
-                : "border-[color:var(--color-border)]"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{n.word}</p>
-                {n.context && <p className="text-xs text-muted-foreground mt-0.5">{n.context}</p>}
-              </div>
-              <div className="flex gap-1 shrink-0">
-                {n.card_id ? (
-                  <span className="text-xs text-emerald-400 flex items-center gap-1">
-                    <Check size={12} /> Card
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => generateForNote(n)}
-                    title="Generate a card"
-                    className="p-1.5 hover:bg-white/10 rounded text-[color:var(--color-gold)]"
-                  >
-                    <Zap size={14} />
-                  </button>
-                )}
-                <button
-                  onClick={() => deleteNote(n.id)}
-                  className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
+            note={n}
+            videoId={videoId}
+            onGenerate={() => generateForNote(n)}
+            onDelete={() => deleteNote(n.id)}
+          />
         ))}
         {videoId && notes.data?.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-6">
