@@ -52,12 +52,13 @@ export function useVideoPlayer() {
  */
 export function useVideoSlot() {
   const { registerSlot } = useVideoPlayer();
-  const ref = useRef<HTMLDivElement | null>(null);
-  useLayoutEffect(() => {
-    registerSlot(ref.current);
-    return () => registerSlot(null);
-  }, [registerSlot]);
-  return ref;
+  // Callback ref: fires on mount AND unmount of the target DOM node.
+  return useCallback(
+    (el: HTMLDivElement | null) => {
+      registerSlot(el);
+    },
+    [registerSlot],
+  );
 }
 
 export function VideoPlayerProvider({ children }: { children: ReactNode }) {
