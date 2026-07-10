@@ -19,17 +19,7 @@ export const Route = createFileRoute("/_authenticated/shadowing")({
 
 const SKIP_BANNER_KEY = "retell-skip-banner-dismissed-at";
 
-interface VideoRow {
-  id: string;
-  source_type: "youtube" | "upload";
-  youtube_id: string | null;
-  storage_path: string | null;
-  title: string;
-  thumbnail_url: string;
-  created_at: string;
-  watch_duration_seconds?: number;
-  retell_skipped_count?: number;
-}
+type VideoRow = PersistentVideo;
 
 interface NoteRow {
   id: string;
@@ -53,19 +43,18 @@ function extractYouTubeId(url: string): string | null {
 
 function ShadowingPage() {
   const qc = useQueryClient();
+  const player = useVideoPlayer();
+  const slotRef = useVideoSlot();
+
   const [mode, setMode] = useState<"youtube" | "upload">("youtube");
   const [ytUrl, setYtUrl] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [currentVideo, setCurrentVideo] = useState<VideoRow | null>(null);
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const ytPlayerRef = useRef<HTMLIFrameElement>(null);
 
-  // Watch tracking (session-scoped)
-  const [sessionStartAt, setSessionStartAt] = useState<string | null>(null);
-  const [sessionWatched, setSessionWatched] = useState(0);
-  const cumulRef = useRef(0);
-  const playingRef = useRef(false);
+  const currentVideo = player.video;
+  const uploadedUrl = player.uploadedUrl;
+  const sessionWatched = player.sessionWatched;
+  const sessionStartAt = player.sessionStartAt;
+
   const [retellOpen, setRetellOpen] = useState(false);
   const [retellVideo, setRetellVideo] = useState<VideoRow | null>(null);
   const [retellNotes, setRetellNotes] = useState<{ id: string; word: string }[]>([]);
@@ -112,98 +101,6 @@ function ShadowingPage() {
       return data as VideoRow[];
     },
   });
-
-  // Reset session tracking when video changes
-  useEffect(() => {
-    if (!currentVideo) {
-      setSessionStartAt(null);
-      setSessionWatched(0);
-      cumulRef.current = 0;
-      playingRef.current = false;
-      return;
-    }
-    setSessionStartAt(new Date().toISOString());
-    setSessionWatched(0);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cumulRef.current = Number((currentVideo as any).watch_duration_seconds) || 0;
-    playingRef.current = false;
-  }, [currentVideo?.id]);
-
-  // YouTube: enable postMessage events and track playerState
-  useEffect(() => {
-    if (!currentVideo || currentVideo.source_type !== "youtube") return;
-    const iframe = ytPlayerRef.current;
-    if (!iframe) return;
-    const send = () => {
-      iframe.contentWindow?.postMessage(
-        JSON.stringify({ event: "listening", id: "shadowing" }),
-        "*",
-      );
-    };
-    // send after load
-    const t = setTimeout(send, 400);
-    const onLoad = () => send();
-    iframe.addEventListener("load", onLoad);
-    const onMsg = (e: MessageEvent) => {
-      try {
-        const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (d?.info?.playerState !== undefined) {
-          playingRef.current = d.info.playerState === 1;
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener("message", onMsg);
-    return () => {
-      clearTimeout(t);
-      iframe.removeEventListener("load", onLoad);
-      window.removeEventListener("message", onMsg);
-    };
-  }, [currentVideo?.id, currentVideo?.source_type]);
-
-  // Upload: watch play/pause on <video>
-  useEffect(() => {
-    if (!currentVideo || currentVideo.source_type !== "upload") return;
-    const el = videoRef.current;
-    if (!el) return;
-    const onPlay = () => (playingRef.current = true);
-    const onPause = () => (playingRef.current = false);
-    el.addEventListener("play", onPlay);
-    el.addEventListener("playing", onPlay);
-    el.addEventListener("pause", onPause);
-    el.addEventListener("ended", onPause);
-    return () => {
-      el.removeEventListener("play", onPlay);
-      el.removeEventListener("playing", onPlay);
-      el.removeEventListener("pause", onPause);
-      el.removeEventListener("ended", onPause);
-    };
-  }, [currentVideo?.id, uploadedUrl]);
-
-  // Tick every 10s: if playing, add to cumul and persist
-  useEffect(() => {
-    if (!currentVideo) return;
-    const vid = currentVideo;
-    const interval = setInterval(async () => {
-      if (!playingRef.current) return;
-      cumulRef.current += 10;
-      setSessionWatched((s) => s + 10);
-      try {
-        await supabase
-          .from("shadowing_videos")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .update({
-            watch_duration_seconds: cumulRef.current,
-            last_watched_at: new Date().toISOString(),
-          } as any)
-          .eq("id", vid.id);
-      } catch {
-        /* ignore */
-      }
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [currentVideo?.id]);
 
   const openRetellFor = useCallback(
     async (v: VideoRow, watched: number, startedAt: string | null) => {
@@ -261,7 +158,6 @@ function ShadowingPage() {
 
   const showSkipBanner = !bannerDismissed && (skipSum.data ?? 0) > 3;
 
-
   async function loadYoutube() {
     const id = extractYouTubeId(ytUrl.trim());
     if (!id) return toast.error("Invalid YouTube URL");
@@ -291,8 +187,7 @@ function ShadowingPage() {
       .select()
       .single();
     if (error) return toast.error(error.message);
-    setCurrentVideo(data as VideoRow);
-    setUploadedUrl(null);
+    player.setVideo(data as VideoRow, null);
     setYtUrl("");
     qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
@@ -318,9 +213,8 @@ function ShadowingPage() {
         .select()
         .single();
       if (error) throw error;
-      setCurrentVideo(data as VideoRow);
       const signed = await supabase.storage.from("shadowing-videos").createSignedUrl(path, 3600 * 4);
-      setUploadedUrl(signed.data?.signedUrl ?? null);
+      player.setVideo(data as VideoRow, signed.data?.signedUrl ?? null);
       qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
       toast.success("Video imported");
@@ -332,14 +226,13 @@ function ShadowingPage() {
   }
 
   async function loadFromHistory(v: VideoRow) {
-    setCurrentVideo(v);
     if (v.source_type === "upload" && v.storage_path) {
       const signed = await supabase.storage
         .from("shadowing-videos")
         .createSignedUrl(v.storage_path, 3600 * 4);
-      setUploadedUrl(signed.data?.signedUrl ?? null);
+      player.setVideo(v, signed.data?.signedUrl ?? null);
     } else {
-      setUploadedUrl(null);
+      player.setVideo(v, null);
     }
   }
 
@@ -359,39 +252,11 @@ function ShadowingPage() {
     const { error } = await supabase.from("shadowing_videos").delete().eq("id", v.id);
     if (error) return toast.error(error.message);
     if (currentVideo?.id === v.id) {
-      setCurrentVideo(null);
-      setUploadedUrl(null);
+      player.clearVideo();
     }
     qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
     toast.success("Video deleted");
-  }
-
-  function seek(delta: number) {
-    if (currentVideo?.source_type === "upload" && videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + delta);
-    } else if (ytPlayerRef.current?.contentWindow) {
-      ytPlayerRef.current.contentWindow.postMessage(
-        JSON.stringify({
-          event: "command",
-          func: delta > 0 ? "seekTo" : "seekTo",
-          args: [Math.max(0, (window as unknown as { __ytTime?: number }).__ytTime ?? 0) + delta, true],
-        }),
-        "*",
-      );
-    }
-  }
-
-  function playPause() {
-    if (currentVideo?.source_type === "upload" && videoRef.current) {
-      if (videoRef.current.paused) videoRef.current.play();
-      else videoRef.current.pause();
-    } else if (ytPlayerRef.current?.contentWindow) {
-      ytPlayerRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
-        "*",
-      );
-    }
   }
 
   return (
@@ -423,7 +288,6 @@ function ShadowingPage() {
           View full history →
         </Link>
       </div>
-
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-6">
         {/* Video column */}
@@ -486,31 +350,16 @@ function ShadowingPage() {
 
           {currentVideo && (
             <div className="glass-panel p-4 space-y-3">
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                {currentVideo.source_type === "youtube" && currentVideo.youtube_id ? (
-                  <iframe
-                    ref={ytPlayerRef}
-                    src={`https://www.youtube.com/embed/${currentVideo.youtube_id}?enablejsapi=1`}
-                    className="w-full h-full"
-                    allow="autoplay; encrypted-media"
-                    allowFullScreen
-                  />
-                ) : uploadedUrl ? (
-                  <video ref={videoRef} src={uploadedUrl} controls className="w-full h-full" />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                    Loading…
-                  </div>
-                )}
-              </div>
+              {/* Persistent player is projected into this slot by VideoPlayerProvider */}
+              <div ref={slotRef} className="aspect-video bg-black rounded-lg overflow-hidden" />
               <div className="flex items-center justify-center gap-2">
-                <button onClick={() => seek(-5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
+                <button onClick={() => player.seek(-5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
                   <Rewind size={16} /> −5s
                 </button>
-                <button onClick={playPause} className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1">
+                <button onClick={player.playPause} className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1">
                   <Play size={16} /> / <Pause size={16} />
                 </button>
-                <button onClick={() => seek(5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
+                <button onClick={() => player.seek(5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
                   +5s <FastForward size={16} />
                 </button>
               </div>
@@ -533,7 +382,6 @@ function ShadowingPage() {
               </div>
             </div>
           )}
-
 
           {/* History strip */}
           <div>
@@ -598,6 +446,7 @@ function ShadowingPage() {
     </div>
   );
 }
+
 
 
 function NotesPanel({ videoId }: { videoId: string | null }) {
