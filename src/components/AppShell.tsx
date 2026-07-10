@@ -153,5 +153,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         })}
       </nav>
     </div>
+    </VideoPlayerProvider>
   );
 }
