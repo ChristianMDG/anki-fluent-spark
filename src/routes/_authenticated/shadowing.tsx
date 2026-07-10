@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -7,10 +7,11 @@ import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
 import {
   Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2,
-  CheckCircle2, Info,
+  CheckCircle2, Info, Pencil,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
+import { useVideoPlayer, useVideoSlot, type PersistentVideo } from "@/lib/video-player-context";
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
@@ -18,17 +19,7 @@ export const Route = createFileRoute("/_authenticated/shadowing")({
 
 const SKIP_BANNER_KEY = "retell-skip-banner-dismissed-at";
 
-interface VideoRow {
-  id: string;
-  source_type: "youtube" | "upload";
-  youtube_id: string | null;
-  storage_path: string | null;
-  title: string;
-  thumbnail_url: string;
-  created_at: string;
-  watch_duration_seconds?: number;
-  retell_skipped_count?: number;
-}
+type VideoRow = PersistentVideo;
 
 interface NoteRow {
   id: string;
@@ -52,19 +43,18 @@ function extractYouTubeId(url: string): string | null {
 
 function ShadowingPage() {
   const qc = useQueryClient();
+  const player = useVideoPlayer();
+  const slotRef = useVideoSlot();
+
   const [mode, setMode] = useState<"youtube" | "upload">("youtube");
   const [ytUrl, setYtUrl] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [currentVideo, setCurrentVideo] = useState<VideoRow | null>(null);
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const ytPlayerRef = useRef<HTMLIFrameElement>(null);
 
-  // Watch tracking (session-scoped)
-  const [sessionStartAt, setSessionStartAt] = useState<string | null>(null);
-  const [sessionWatched, setSessionWatched] = useState(0);
-  const cumulRef = useRef(0);
-  const playingRef = useRef(false);
+  const currentVideo = player.video;
+  const uploadedUrl = player.uploadedUrl;
+  const sessionWatched = player.sessionWatched;
+  const sessionStartAt = player.sessionStartAt;
+
   const [retellOpen, setRetellOpen] = useState(false);
   const [retellVideo, setRetellVideo] = useState<VideoRow | null>(null);
   const [retellNotes, setRetellNotes] = useState<{ id: string; word: string }[]>([]);
@@ -111,98 +101,6 @@ function ShadowingPage() {
       return data as VideoRow[];
     },
   });
-
-  // Reset session tracking when video changes
-  useEffect(() => {
-    if (!currentVideo) {
-      setSessionStartAt(null);
-      setSessionWatched(0);
-      cumulRef.current = 0;
-      playingRef.current = false;
-      return;
-    }
-    setSessionStartAt(new Date().toISOString());
-    setSessionWatched(0);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cumulRef.current = Number((currentVideo as any).watch_duration_seconds) || 0;
-    playingRef.current = false;
-  }, [currentVideo?.id]);
-
-  // YouTube: enable postMessage events and track playerState
-  useEffect(() => {
-    if (!currentVideo || currentVideo.source_type !== "youtube") return;
-    const iframe = ytPlayerRef.current;
-    if (!iframe) return;
-    const send = () => {
-      iframe.contentWindow?.postMessage(
-        JSON.stringify({ event: "listening", id: "shadowing" }),
-        "*",
-      );
-    };
-    // send after load
-    const t = setTimeout(send, 400);
-    const onLoad = () => send();
-    iframe.addEventListener("load", onLoad);
-    const onMsg = (e: MessageEvent) => {
-      try {
-        const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (d?.info?.playerState !== undefined) {
-          playingRef.current = d.info.playerState === 1;
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener("message", onMsg);
-    return () => {
-      clearTimeout(t);
-      iframe.removeEventListener("load", onLoad);
-      window.removeEventListener("message", onMsg);
-    };
-  }, [currentVideo?.id, currentVideo?.source_type]);
-
-  // Upload: watch play/pause on <video>
-  useEffect(() => {
-    if (!currentVideo || currentVideo.source_type !== "upload") return;
-    const el = videoRef.current;
-    if (!el) return;
-    const onPlay = () => (playingRef.current = true);
-    const onPause = () => (playingRef.current = false);
-    el.addEventListener("play", onPlay);
-    el.addEventListener("playing", onPlay);
-    el.addEventListener("pause", onPause);
-    el.addEventListener("ended", onPause);
-    return () => {
-      el.removeEventListener("play", onPlay);
-      el.removeEventListener("playing", onPlay);
-      el.removeEventListener("pause", onPause);
-      el.removeEventListener("ended", onPause);
-    };
-  }, [currentVideo?.id, uploadedUrl]);
-
-  // Tick every 10s: if playing, add to cumul and persist
-  useEffect(() => {
-    if (!currentVideo) return;
-    const vid = currentVideo;
-    const interval = setInterval(async () => {
-      if (!playingRef.current) return;
-      cumulRef.current += 10;
-      setSessionWatched((s) => s + 10);
-      try {
-        await supabase
-          .from("shadowing_videos")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .update({
-            watch_duration_seconds: cumulRef.current,
-            last_watched_at: new Date().toISOString(),
-          } as any)
-          .eq("id", vid.id);
-      } catch {
-        /* ignore */
-      }
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [currentVideo?.id]);
 
   const openRetellFor = useCallback(
     async (v: VideoRow, watched: number, startedAt: string | null) => {
@@ -260,7 +158,6 @@ function ShadowingPage() {
 
   const showSkipBanner = !bannerDismissed && (skipSum.data ?? 0) > 3;
 
-
   async function loadYoutube() {
     const id = extractYouTubeId(ytUrl.trim());
     if (!id) return toast.error("Invalid YouTube URL");
@@ -290,8 +187,7 @@ function ShadowingPage() {
       .select()
       .single();
     if (error) return toast.error(error.message);
-    setCurrentVideo(data as VideoRow);
-    setUploadedUrl(null);
+    player.setVideo(data as VideoRow, null);
     setYtUrl("");
     qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
@@ -317,9 +213,8 @@ function ShadowingPage() {
         .select()
         .single();
       if (error) throw error;
-      setCurrentVideo(data as VideoRow);
       const signed = await supabase.storage.from("shadowing-videos").createSignedUrl(path, 3600 * 4);
-      setUploadedUrl(signed.data?.signedUrl ?? null);
+      player.setVideo(data as VideoRow, signed.data?.signedUrl ?? null);
       qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
       toast.success("Video imported");
@@ -331,14 +226,13 @@ function ShadowingPage() {
   }
 
   async function loadFromHistory(v: VideoRow) {
-    setCurrentVideo(v);
     if (v.source_type === "upload" && v.storage_path) {
       const signed = await supabase.storage
         .from("shadowing-videos")
         .createSignedUrl(v.storage_path, 3600 * 4);
-      setUploadedUrl(signed.data?.signedUrl ?? null);
+      player.setVideo(v, signed.data?.signedUrl ?? null);
     } else {
-      setUploadedUrl(null);
+      player.setVideo(v, null);
     }
   }
 
@@ -358,39 +252,11 @@ function ShadowingPage() {
     const { error } = await supabase.from("shadowing_videos").delete().eq("id", v.id);
     if (error) return toast.error(error.message);
     if (currentVideo?.id === v.id) {
-      setCurrentVideo(null);
-      setUploadedUrl(null);
+      player.clearVideo();
     }
     qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
     toast.success("Video deleted");
-  }
-
-  function seek(delta: number) {
-    if (currentVideo?.source_type === "upload" && videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + delta);
-    } else if (ytPlayerRef.current?.contentWindow) {
-      ytPlayerRef.current.contentWindow.postMessage(
-        JSON.stringify({
-          event: "command",
-          func: delta > 0 ? "seekTo" : "seekTo",
-          args: [Math.max(0, (window as unknown as { __ytTime?: number }).__ytTime ?? 0) + delta, true],
-        }),
-        "*",
-      );
-    }
-  }
-
-  function playPause() {
-    if (currentVideo?.source_type === "upload" && videoRef.current) {
-      if (videoRef.current.paused) videoRef.current.play();
-      else videoRef.current.pause();
-    } else if (ytPlayerRef.current?.contentWindow) {
-      ytPlayerRef.current.contentWindow.postMessage(
-        JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
-        "*",
-      );
-    }
   }
 
   return (
@@ -422,7 +288,6 @@ function ShadowingPage() {
           View full history →
         </Link>
       </div>
-
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-6">
         {/* Video column */}
@@ -485,31 +350,16 @@ function ShadowingPage() {
 
           {currentVideo && (
             <div className="glass-panel p-4 space-y-3">
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                {currentVideo.source_type === "youtube" && currentVideo.youtube_id ? (
-                  <iframe
-                    ref={ytPlayerRef}
-                    src={`https://www.youtube.com/embed/${currentVideo.youtube_id}?enablejsapi=1`}
-                    className="w-full h-full"
-                    allow="autoplay; encrypted-media"
-                    allowFullScreen
-                  />
-                ) : uploadedUrl ? (
-                  <video ref={videoRef} src={uploadedUrl} controls className="w-full h-full" />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                    Loading…
-                  </div>
-                )}
-              </div>
+              {/* Persistent player is projected into this slot by VideoPlayerProvider */}
+              <div ref={slotRef} className="aspect-video bg-black rounded-lg overflow-hidden" />
               <div className="flex items-center justify-center gap-2">
-                <button onClick={() => seek(-5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
+                <button onClick={() => player.seek(-5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
                   <Rewind size={16} /> −5s
                 </button>
-                <button onClick={playPause} className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1">
+                <button onClick={player.playPause} className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1">
                   <Play size={16} /> / <Pause size={16} />
                 </button>
-                <button onClick={() => seek(5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
+                <button onClick={() => player.seek(5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
                   +5s <FastForward size={16} />
                 </button>
               </div>
@@ -532,7 +382,6 @@ function ShadowingPage() {
               </div>
             </div>
           )}
-
 
           {/* History strip */}
           <div>
@@ -597,6 +446,7 @@ function ShadowingPage() {
     </div>
   );
 }
+
 
 
 function NotesPanel({ videoId }: { videoId: string | null }) {
@@ -711,42 +561,13 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
 
       <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
         {(notes.data ?? []).map((n) => (
-          <div
+          <NoteItem
             key={n.id}
-            className={`p-3 rounded-lg border transition ${
-              n.card_id
-                ? "border-emerald-500/40 bg-emerald-950/10 opacity-70"
-                : "border-[color:var(--color-border)]"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{n.word}</p>
-                {n.context && <p className="text-xs text-muted-foreground mt-0.5">{n.context}</p>}
-              </div>
-              <div className="flex gap-1 shrink-0">
-                {n.card_id ? (
-                  <span className="text-xs text-emerald-400 flex items-center gap-1">
-                    <Check size={12} /> Card
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => generateForNote(n)}
-                    title="Generate a card"
-                    className="p-1.5 hover:bg-white/10 rounded text-[color:var(--color-gold)]"
-                  >
-                    <Zap size={14} />
-                  </button>
-                )}
-                <button
-                  onClick={() => deleteNote(n.id)}
-                  className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
+            note={n}
+            videoId={videoId}
+            onGenerate={() => generateForNote(n)}
+            onDelete={() => deleteNote(n.id)}
+          />
         ))}
         {videoId && notes.data?.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-6">
@@ -766,6 +587,146 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
             ? `${batchProgress.done}/${batchProgress.total}…`
             : `Generate all cards (${pendingCount})`}
         </button>
+      )}
+    </div>
+  );
+}
+
+function NoteItem({
+  note,
+  videoId,
+  onGenerate,
+  onDelete,
+}: {
+  note: NoteRow;
+  videoId: string | null;
+  onGenerate: () => void;
+  onDelete: () => void;
+}) {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [wordDraft, setWordDraft] = useState(note.word);
+  const [contextDraft, setContextDraft] = useState(note.context ?? "");
+  const [saving, setSaving] = useState(false);
+
+  function startEdit() {
+    setWordDraft(note.word);
+    setContextDraft(note.context ?? "");
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+  }
+
+  async function saveEdit() {
+    const w = wordDraft.trim();
+    if (!w) return toast.error("Le mot ne peut pas être vide");
+    setSaving(true);
+    const { error } = await supabase
+      .from("shadowing_notes")
+      .update({ word: w, context: contextDraft.trim() || null })
+      .eq("id", note.id);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    if (note.card_id && w !== note.word) {
+      toast.info(
+        `Cette note a déjà une fiche pour "${note.word}" — la modifier ne changera pas la fiche existante.`,
+      );
+    }
+    setEditing(false);
+    qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
+  }
+
+  return (
+    <div
+      className={`p-3 rounded-lg border transition ${
+        note.card_id
+          ? "border-emerald-500/40 bg-emerald-950/10"
+          : "border-[color:var(--color-border)]"
+      } ${editing ? "!opacity-100" : note.card_id ? "opacity-70" : ""}`}
+    >
+      {editing ? (
+        <div className="space-y-2">
+          <input
+            autoFocus
+            value={wordDraft}
+            onChange={(e) => setWordDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            className="w-full glass-panel-soft px-2 py-1.5 rounded text-sm font-medium"
+            placeholder="Mot"
+          />
+          <input
+            value={contextDraft}
+            onChange={(e) => setContextDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            className="w-full glass-panel-soft px-2 py-1.5 rounded text-xs"
+            placeholder="Contexte"
+          />
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={saveEdit}
+              disabled={saving}
+              className="p-1.5 hover:bg-white/10 rounded text-emerald-400"
+              aria-label="Valider"
+              title="Valider (Entrée)"
+            >
+              <Check size={14} />
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
+              aria-label="Annuler"
+              title="Annuler (Échap)"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium truncate">{note.word}</p>
+            {note.context && (
+              <p className="text-xs text-muted-foreground mt-0.5">{note.context}</p>
+            )}
+          </div>
+          <div className="flex gap-1 shrink-0">
+            {note.card_id ? (
+              <span className="text-xs text-emerald-400 flex items-center gap-1">
+                <Check size={12} /> Card
+              </span>
+            ) : (
+              <button
+                onClick={onGenerate}
+                title="Generate a card"
+                className="p-1.5 hover:bg-white/10 rounded text-[color:var(--color-gold)]"
+              >
+                <Zap size={14} />
+              </button>
+            )}
+            <button
+              onClick={startEdit}
+              title="Modifier"
+              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              onClick={onDelete}
+              title="Supprimer"
+              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

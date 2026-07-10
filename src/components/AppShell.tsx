@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadTsv } from "@/lib/tsv-export";
 import { toast } from "sonner";
+import { VideoPlayerProvider } from "@/lib/video-player-context";
 
 const NAV = [
   { to: "/home", label: "Home", icon: Home },
@@ -71,6 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
+    <VideoPlayerProvider>
     <div className="min-h-screen flex flex-col md:flex-row">
       <aside className="hidden md:flex md:flex-col md:w-56 md:min-h-screen md:sticky md:top-0 glass-panel-soft border-r border-[color:var(--color-border)] p-4 gap-1">
         <div className="mb-6 px-2">
@@ -150,5 +152,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         })}
       </nav>
     </div>
+    </VideoPlayerProvider>
   );
 }
