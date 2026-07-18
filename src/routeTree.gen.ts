@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedFluencyRouteImport } from './routes/_authenticated/fluency'
-import { Route as AuthenticatedGenerateRouteImport } from './routes/_authenticated/generate'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
@@ -38,11 +37,6 @@ const AuthRoute = AuthRouteImport.update({
 const AuthenticatedFluencyRoute = AuthenticatedFluencyRouteImport.update({
   id: '/fluency',
   path: '/fluency',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedGenerateRoute = AuthenticatedGenerateRouteImport.update({
-  id: '/generate',
-  path: '/generate',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
@@ -81,7 +75,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/fluency': typeof AuthenticatedFluencyRouteWithChildren
-  '/generate': typeof AuthenticatedGenerateRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
@@ -93,7 +86,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/fluency': typeof AuthenticatedFluencyRouteWithChildren
-  '/generate': typeof AuthenticatedGenerateRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
@@ -107,7 +99,6 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/fluency': typeof AuthenticatedFluencyRouteWithChildren
-  '/_authenticated/generate': typeof AuthenticatedGenerateRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
@@ -121,7 +112,6 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/fluency'
-    | '/generate'
     | '/history'
     | '/home'
     | '/library'
@@ -133,7 +123,6 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/fluency'
-    | '/generate'
     | '/history'
     | '/home'
     | '/library'
@@ -146,7 +135,6 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/fluency'
-    | '/_authenticated/generate'
     | '/_authenticated/history'
     | '/_authenticated/home'
     | '/_authenticated/library'
@@ -189,13 +177,6 @@ declare module '@tanstack/react-router' {
       path: '/fluency'
       fullPath: '/fluency'
       preLoaderRoute: typeof AuthenticatedFluencyRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/generate': {
-      id: '/_authenticated/generate'
-      path: '/generate'
-      fullPath: '/generate'
-      preLoaderRoute: typeof AuthenticatedGenerateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/history': {
@@ -256,7 +237,6 @@ const AuthenticatedFluencyRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedFluencyRoute: typeof AuthenticatedFluencyRouteWithChildren
-  AuthenticatedGenerateRoute: typeof AuthenticatedGenerateRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
@@ -266,7 +246,6 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFluencyRoute: AuthenticatedFluencyRouteWithChildren,
-  AuthenticatedGenerateRoute: AuthenticatedGenerateRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,

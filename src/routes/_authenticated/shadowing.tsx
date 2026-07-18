@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   Info,
   Pencil,
+  Radio,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
@@ -356,10 +357,19 @@ function ShadowingPage() {
           </div>
 
           {currentVideo && (
-            <div className="glass-panel p-4 space-y-3">
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden">
+              <div className="pointer-events-none absolute -top-14 -right-14 w-40 h-40 bg-[color:var(--color-crimson)]/10 rounded-full blur-3xl" />
+
+              <div className="flex items-center gap-1.5 text-[color:var(--color-crimson)] relative">
+                <Radio size={11} className="animate-pulse" />
+                <span className="label-mono text-[9px] tracking-[0.2em]">LIVE SESSION</span>
+              </div>
+
               {/* Persistent player is projected into this slot by VideoPlayerProvider */}
-              <div ref={slotRef} className="aspect-video bg-black rounded-lg overflow-hidden" />
-              <div className="flex items-center justify-center gap-2">
+              <div className="rounded-lg overflow-hidden border border-[color:var(--color-crimson)]/20 relative">
+                <div ref={slotRef} className="aspect-video bg-black" />
+              </div>
+              <div className="flex items-center justify-center gap-2 relative">
                 <button
                   onClick={() => player.seek(-5)}
                   className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1"
@@ -379,10 +389,10 @@ function ShadowingPage() {
                   +5s <FastForward size={16} />
                 </button>
               </div>
-              <p className="text-sm text-muted-foreground text-center truncate">
+              <p className="text-sm text-muted-foreground text-center truncate relative">
                 {currentVideo.title}
               </p>
-              <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--color-border)]">
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--color-border)] relative">
                 <p className="label-mono">
                   Session : {Math.floor(sessionWatched / 60)}:
                   {(sessionWatched % 60).toString().padStart(2, "0")}
@@ -403,33 +413,50 @@ function ShadowingPage() {
           <div>
             <p className="label-mono mb-2">Recent history</p>
             <div className="flex gap-3 overflow-x-auto pb-2">
-              {videos.data?.map((v) => (
-                <div
-                  key={v.id}
-                  className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
-                >
-                  <button onClick={() => loadFromHistory(v)} className="w-full text-left">
-                    <div className="aspect-video bg-black">
-                      {v.thumbnail_url ? (
-                        <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                          {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => deleteVideo(v, e)}
-                    className="absolute top-1.5 right-1.5 p-1.5 rounded-md bg-black/80 backdrop-blur text-muted-foreground hover:text-red-400 hover:bg-red-500/20 opacity-70 md:opacity-0 md:group-hover:opacity-100 transition z-10"
-                    aria-label="Delete video"
+              {videos.data?.map((v) => {
+                const isActive = currentVideo?.id === v.id;
+                return (
+                  <div
+                    key={v.id}
+                    className={`shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden transition group relative ${
+                      isActive
+                        ? "border-[color:var(--color-gold)]/70 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]"
+                        : "hover:border-[color:var(--color-crimson-glow)]"
+                    }`}
                   >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
+                    <div className="pointer-events-none absolute inset-x-0 h-[1px] bg-[var(--color-crimson)]/25 opacity-0 group-hover:opacity-100 group-hover:animate-[scanline_2.2s_infinite_linear] z-10" />
+                    <button onClick={() => loadFromHistory(v)} className="w-full text-left">
+                      <div className="aspect-video bg-black relative">
+                        {v.thumbnail_url ? (
+                          <img
+                            src={v.thumbnail_url}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                            {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
+                          </div>
+                        )}
+                        {isActive && (
+                          <span className="absolute top-1.5 left-1.5 label-mono text-[8px] tracking-widest px-1.5 py-0.5 rounded bg-[color:var(--color-gold)]/20 border border-[color:var(--color-gold)]/50 text-[color:var(--color-gold)]">
+                            EN COURS
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => deleteVideo(v, e)}
+                      className="absolute top-1.5 right-1.5 p-1.5 rounded-md bg-black/80 backdrop-blur text-muted-foreground hover:text-red-400 hover:bg-red-500/20 opacity-70 md:opacity-0 md:group-hover:opacity-100 transition z-10"
+                      aria-label="Delete video"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })}
               {videos.data?.length === 0 && (
                 <p className="text-sm text-muted-foreground py-4">Your history will appear here.</p>
               )}
@@ -535,15 +562,26 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
   const pendingCount = (notes.data ?? []).filter((n) => !n.card_id).length;
 
   return (
-    <div className="glass-panel p-4 flex flex-col gap-3 max-h-[calc(100vh-160px)]">
-      <p className="label-mono">My notes</p>
+    <div className="glass-panel p-4 flex flex-col gap-3 max-h-[calc(100vh-160px)] relative overflow-hidden">
+      <div className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 bg-[color:var(--color-gold)]/5 rounded-full blur-2xl" />
+
+      <div className="flex items-center justify-between relative">
+        <p className="label-mono">My notes</p>
+        {(notes.data?.length ?? 0) > 0 && (
+          <span className="label-mono text-[9px] text-muted-foreground/60">
+            {(notes.data?.length ?? 0) - pendingCount}/{notes.data?.length} traité
+            {(notes.data?.length ?? 0) - pendingCount !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (!wordInput.trim() || !videoId) return;
           addNote.mutate();
         }}
-        className="space-y-2"
+        className="space-y-2 relative"
       >
         <input
           value={wordInput}
@@ -568,7 +606,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
         </button>
       </form>
 
-      <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
+      <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1 relative">
         {(notes.data ?? []).map((n) => (
           <NoteItem
             key={n.id}
@@ -584,16 +622,26 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
       </div>
 
       {pendingCount > 0 && (
-        <button
-          onClick={generateAll}
-          disabled={batchProgress !== null}
-          className="btn-crimson rounded-lg px-3 py-2.5 text-sm flex items-center justify-center gap-2"
-        >
-          <Zap size={14} />
-          {batchProgress
-            ? `${batchProgress.done}/${batchProgress.total}…`
-            : `Generate all cards (${pendingCount})`}
-        </button>
+        <div className="relative space-y-1.5">
+          {batchProgress && (
+            <div className="h-1 bg-black/60 rounded-full border border-white/5 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[color:var(--color-crimson)] to-[color:var(--color-gold)] rounded-full shadow-[0_0_8px_var(--color-gold)] transition-all duration-300"
+                style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }}
+              />
+            </div>
+          )}
+          <button
+            onClick={generateAll}
+            disabled={batchProgress !== null}
+            className="btn-crimson rounded-lg px-3 py-2.5 text-sm flex items-center justify-center gap-2 w-full"
+          >
+            <Zap size={14} />
+            {batchProgress
+              ? `${batchProgress.done}/${batchProgress.total}…`
+              : `Generate all cards (${pendingCount})`}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -647,11 +695,9 @@ function NoteItem({
 
   return (
     <div
-      className={`p-3 rounded-lg border transition ${
-        note.card_id
-          ? "border-emerald-500/40 bg-emerald-950/10"
-          : "border-[color:var(--color-border)]"
-      } ${editing ? "!opacity-100" : note.card_id ? "opacity-70" : ""}`}
+      className={`pl-3 pr-3 py-2.5 rounded-lg border-l-2 bg-white/[0.02] transition ${
+        note.card_id ? "border-emerald-500/60" : "border-[color:var(--color-gold)]/50"
+      } ${editing ? "!opacity-100" : note.card_id ? "opacity-75" : ""}`}
     >
       {editing ? (
         <div className="space-y-2">

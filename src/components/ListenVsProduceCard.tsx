@@ -15,7 +15,8 @@ function fmtMin(seconds: number) {
   return `${m} min`;
 }
 
-const DAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
+// English day labels
+const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 export function ListenVsProduceCard() {
   const start = weekStart();
@@ -74,24 +75,25 @@ export function ListenVsProduceCard() {
   const maxDay = Math.max(1, ...data.perDay.map((d) => d.listen + d.produce));
 
   return (
-    <div className="glass-panel p-5 md:p-6 space-y-4">
+    /* Couleur du container principal modifiée pour correspondre au style Cyber-Militant d'Akatsuki */
+    <div className="p-5 md:p-6 space-y-4 bg-gradient-to-br from-[#120403]/60 via-[#0d0605]/40 to-black/60 backdrop-blur-md border border-[var(--color-border)]/40 rounded-2xl shadow-xl w-full flex flex-col justify-between h-full min-h-0 overflow-hidden">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div>
-          <p className="label-mono text-[color:var(--color-gold)]">Écoute vs Production</p>
-          <h3 className="text-lg font-semibold mt-0.5">Cette semaine</h3>
+          <p className="font-audiowide text-[11px] tracking-wider uppercase text-[var(--color-gold)]">Listening vs Production</p>
+          <h3 className="text-lg font-semibold mt-0.5 text-white">This Week</h3>
         </div>
-        <p className="text-sm text-muted-foreground font-mono">{fmtMin(total)} au total</p>
+        <p className="text-sm text-neutral-400 font-mono">{fmtMin(total)} total</p>
       </div>
 
       <div className="space-y-2">
-        <div className="h-3 rounded-full overflow-hidden bg-white/5 flex">
+        <div className="h-3 rounded-full overflow-hidden bg-neutral-950/80 border border-white/5 flex">
           <div
-            className="h-full transition-all"
+            className="h-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(91,141,239,0.3)]"
             style={{ width: `${listenPct}%`, background: "#5b8def" }}
-            title={`Écoute: ${fmtMin(data.totalListen)}`}
+            title={`Listening: ${fmtMin(data.totalListen)}`}
           />
           <div
-            className="h-full transition-all"
+            className="h-full transition-all duration-500 ease-out shadow-[0_0_8px_var(--color-crimson)]"
             style={{
               width: `${producePct}%`,
               background: "var(--color-crimson)",
@@ -99,22 +101,22 @@ export function ListenVsProduceCard() {
             title={`Production: ${fmtMin(data.totalProduce)}`}
           />
         </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-4 text-xs text-neutral-400">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#5b8def" }} />
-            <Headphones size={12} /> Écoute {fmtMin(data.totalListen)}
+            <Headphones size={12} className="text-[#5b8def]" /> Listening {fmtMin(data.totalListen)}
           </span>
           <span className="flex items-center gap-1.5">
             <span
               className="w-2.5 h-2.5 rounded-sm"
               style={{ background: "var(--color-crimson)" }}
             />
-            <Mic size={12} /> Production {fmtMin(data.totalProduce)}
+            <Mic size={12} className="text-[var(--color-crimson)]" /> Production {fmtMin(data.totalProduce)}
           </span>
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground">{insight}</p>
+      <p className="text-sm text-neutral-400">{insight}</p>
 
       <div className="grid grid-cols-7 gap-2 pt-2">
         {DAY_LABELS.map((lbl, i) => {
@@ -127,15 +129,15 @@ export function ListenVsProduceCard() {
             <div key={i} className="flex flex-col items-center gap-1">
               <div className="h-16 w-full flex items-end">
                 <div
-                  className="w-full rounded-sm overflow-hidden bg-white/5 flex flex-col justify-end"
+                  className="w-full rounded-sm overflow-hidden bg-neutral-950/60 border border-white/5 flex flex-col justify-end"
                   style={{ height: `${Math.max(heightPct, sum ? 8 : 4)}%` }}
-                  title={`${fmtMin(d.listen)} écoute · ${fmtMin(d.produce)} production`}
+                  title={`${fmtMin(d.listen)} listening · ${fmtMin(d.produce)} production`}
                 >
                   <div style={{ height: `${produceH}%`, background: "var(--color-crimson)" }} />
                   <div style={{ height: `${listenH}%`, background: "#5b8def" }} />
                 </div>
               </div>
-              <span className="text-[10px] font-mono text-muted-foreground">{lbl}</span>
+              <span className="text-[10px] font-mono text-neutral-500 font-bold">{lbl}</span>
             </div>
           );
         })}
@@ -151,10 +153,10 @@ function dayIndex(date: Date, start: Date): number {
 
 function getInsight(listen: number, produce: number): string {
   if (listen === 0 && produce === 0)
-    return "Regarde une vidéo de shadowing ou lance une session Fluency pour lancer la semaine.";
-  if (produce >= listen) return "Belle proportion de pratique active cette semaine !";
+    return "Watch a shadowing video or start a Fluency session to kick off the week.";
+  if (produce >= listen) return "Great proportion of active practice this week!";
   const ratio = produce > 0 ? listen / produce : Infinity;
   if (ratio > 3)
-    return "Tu écoutes beaucoup plus que tu ne parles cette semaine. Essaie d'ajouter quelques sessions Retell it ou Fluency Practice pour rééquilibrer.";
-  return "Bon équilibre, continue sur cette lancée.";
+    return "You are listening much more than talking. Try adding Retell it or Fluency Practice sessions to balance it out.";
+  return "Good balance, keep up the momentum.";
 }
