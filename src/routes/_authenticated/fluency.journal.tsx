@@ -102,10 +102,7 @@ function FluencyJournal() {
               <LineChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis dataKey="week" tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} />
-                <YAxis
-                  domain={[1, 5]}
-                  tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }}
-                />
+                <YAxis domain={[1, 5]} tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{
                     background: "rgba(15,15,20,0.95)",
@@ -213,13 +210,7 @@ function FluencyJournal() {
   );
 }
 
-function RecordingCard({
-  row,
-  onTogglePin,
-}: {
-  row: Row;
-  onTogglePin: (r: Row) => void;
-}) {
+function RecordingCard({ row, onTogglePin }: { row: Row; onTogglePin: (r: Row) => void }) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -317,7 +308,15 @@ function labelType(t: string) {
 function groupByDay(rows: Row[]): [string, Row[]][] {
   const map = new Map<string, Row[]>();
   for (const r of rows) {
-    const day = new Date(r.created_at).toISOString().slice(0, 10);
+    // Bucket by LOCAL calendar day, not UTC. `.toISOString().slice(0, 10)`
+    // reads the UTC date, which mis-files any recording made in the first
+    // few hours after local midnight into the previous day for users ahead
+    // of UTC (e.g. UTC+3 in Antananarivo) — a late-night Retell it session
+    // could silently show up under yesterday's heading.
+    const d = new Date(r.created_at);
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
     if (!map.has(day)) map.set(day, []);
     map.get(day)!.push(r);
   }
@@ -325,7 +324,11 @@ function groupByDay(rows: Row[]): [string, Row[]][] {
 }
 
 function formatDay(d: string) {
-  return new Date(d).toLocaleDateString("fr-FR", {
+  // `d` is a local "YYYY-MM-DD" key built above. Parse it as local
+  // components (not `new Date(d)`, which treats a bare date string as UTC
+  // midnight and would shift the displayed weekday for the same reason).
+  const [y, m, day] = d.split("-").map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -337,10 +340,7 @@ function buildWeeklyTrend(rows: Row[]) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 90);
   const filtered = rows.filter((r) => new Date(r.created_at) >= cutoff);
-  const buckets = new Map<
-    string,
-    { f: number; c: number; h: number; n: number; ts: number }
-  >();
+  const buckets = new Map<string, { f: number; c: number; h: number; n: number; ts: number }>();
   for (const r of filtered) {
     const d = new Date(r.created_at);
     const key = weekKey(d);

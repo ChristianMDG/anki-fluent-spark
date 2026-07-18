@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/fluency")({
+export const Route = createFileRoute("/_authenticated/fluency/")({
   validateSearch: (s: Record<string, unknown>) =>
     z.object({ journeyCell: z.string().uuid().optional() }).parse(s),
   component: FluencyPage,
