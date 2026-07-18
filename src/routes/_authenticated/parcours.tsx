@@ -83,22 +83,22 @@ function ParcoursPage() {
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
       <div>
         <p className="label-mono text-[color:var(--color-gold)] flex items-center gap-2">
-          <Compass size={14} /> Parcours
+          <Compass size={14} /> Path
         </p>
         <h1 className="text-3xl md:text-4xl font-bold mt-1">
-          Devenir fluide dans chaque situation.
+          Become fluent in every situation.
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl">
-          5 situations × 5 niveaux de complexité linguistique. Chaque cellule maîtrisée
-          débloque la suivante à droite et en dessous.
+          5 situations × 5 levels of linguistic complexity. Each mastered cell
+          unlocks the next one to its right and below.
         </p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="Maîtrisées" value={mastered} accent />
-        <Stat label="En cours" value={inProgress} />
-        <Stat label="Verrouillées" value={locked} />
-        <Stat label="Complétion" value={`${pct}%`} />
+        <Stat label="Mastered" value={mastered} accent />
+        <Stat label="In Progress" value={inProgress} />
+        <Stat label="Locked" value={locked} />
+        <Stat label="Completion" value={`${pct}%`} />
       </div>
 
       {/* Matrix */}
@@ -108,7 +108,7 @@ function ParcoursPage() {
             <div />
             {LEVELS.map((lvl) => (
               <div key={lvl} className="text-center">
-                <div className="label-mono text-[color:var(--color-gold)]">Niveau {lvl}</div>
+                <div className="label-mono text-[color:var(--color-gold)]">Level {lvl}</div>
                 <div className="text-sm font-semibold">{COMPLEXITY_META[lvl].label}</div>
               </div>
             ))}
@@ -183,12 +183,12 @@ function MatrixCell({ cell, onClick }: { cell: Cell; onClick: () => void }) {
   if (cell.status === "locked") {
     cls = "bg-black/40 border-[color:var(--color-border)] text-muted-foreground opacity-70 cursor-help";
     icon = <Lock size={18} />;
-    text = <span className="label-mono">Verrouillé</span>;
+    text = <span className="label-mono">Locked</span>;
   } else if (cell.status === "available") {
     cls =
       "bg-white/5 border-[color:var(--color-border)] hover:-translate-y-0.5 hover:border-[color:var(--color-crimson-glow)] cursor-pointer";
     icon = <Play size={18} className="text-[color:var(--color-crimson-glow)]" />;
-    text = <span className="font-semibold">Commencer</span>;
+    text = <span className="font-semibold">Start</span>;
   } else if (cell.status === "in_progress") {
     cls =
       "bg-[color:var(--color-crimson)]/20 border-[color:var(--color-crimson-glow)] hover:-translate-y-0.5 cursor-pointer";
@@ -199,7 +199,7 @@ function MatrixCell({ cell, onClick }: { cell: Cell; onClick: () => void }) {
     cls =
       "bg-gradient-to-br from-[color:var(--color-crimson)]/30 to-[color:var(--color-gold)]/20 border-[color:var(--color-gold)] cursor-pointer hover:-translate-y-0.5";
     icon = <Check size={20} className="text-[color:var(--color-gold)]" />;
-    text = <span className="label-mono text-[color:var(--color-gold)]">Maîtrisé</span>;
+    text = <span className="label-mono text-[color:var(--color-gold)]">Mastered</span>;
   }
 
   return (
@@ -207,7 +207,7 @@ function MatrixCell({ cell, onClick }: { cell: Cell; onClick: () => void }) {
       type="button"
       onClick={clickable || cell.status === "locked" ? onClick : undefined}
       className={`${base} ${cls}`}
-      aria-label={`${cell.situation} niveau ${cell.complexity_level} — ${cell.status}`}
+      aria-label={`${cell.situation} level ${cell.complexity_level} — ${cell.status}`}
     >
       {icon}
       {text}
@@ -240,7 +240,7 @@ function CellDetail({
         <button
           onClick={onClose}
           className="absolute top-3 right-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5"
-          aria-label="Fermer"
+          aria-label="Close"
         >
           <X size={16} />
         </button>
@@ -250,7 +250,7 @@ function CellDetail({
             {sit.icon} {sit.label} — {cx.label}
           </p>
           <h2 className="text-2xl font-bold mt-1">
-            Niveau {cell.complexity_level} · {cx.label}
+            Level {cell.complexity_level} · {cx.label}
           </h2>
         </div>
 
@@ -260,21 +260,21 @@ function CellDetail({
         {locked ? (
           <div className="glass-panel-soft p-4 rounded-lg text-sm space-y-2">
             <p className="font-semibold flex items-center gap-2">
-              <Lock size={14} /> Cellule verrouillée
+              <Lock size={14} /> Cell Locked
             </p>
             <p className="text-muted-foreground">
-              Maîtrise{" "}
+              Master{" "}
               {cell.complexity_level > 1 && (
                 <>
-                  la cellule <b>{cx.label}</b> précédente sur la même ligne
+                  the preceding <b>{cx.label}</b> cell on the same row
                 </>
               )}
               {cell.complexity_level > 1 &&
                 JOURNEY_SITUATIONS.indexOf(cell.situation) > 0 &&
-                " et "}
+                " and "}
               {JOURNEY_SITUATIONS.indexOf(cell.situation) > 0 && (
                 <>
-                  la même colonne dans <b>
+                  the same column in <b>
                     {
                       SITUATION_META[
                         JOURNEY_SITUATIONS[
@@ -285,14 +285,14 @@ function CellDetail({
                   </b>
                 </>
               )}
-              {" "}pour débloquer.
+              {" "}to unlock.
             </p>
           </div>
         ) : (
           <>
             <div>
               <div className="flex justify-between label-mono mb-1">
-                <span>Progression</span>
+                <span>Progress</span>
                 <span>{cell.sessions_completed} / 5</span>
               </div>
               <div className="h-2 rounded-full bg-white/10 overflow-hidden">
@@ -308,17 +308,17 @@ function CellDetail({
                 onClick={onStart}
                 className="btn-crimson rounded-lg px-5 py-2.5 flex items-center gap-2"
               >
-                <Mic size={16} /> Commencer une session
+                <Mic size={16} /> Start a session
               </button>
               <button
                 onClick={() => {
                   toast.info(
-                    "Filtre à venir dans le journal — les sessions du Parcours sont enregistrées avec la cellule associée.",
+                    "Filter coming soon to the journal — Path sessions are saved with the associated cell.",
                   );
                 }}
                 className="rounded-lg px-5 py-2.5 border border-[color:var(--color-border)] hover:bg-white/5 flex items-center gap-2 text-sm"
               >
-                <History size={14} /> Historique
+                <History size={14} /> History
               </button>
             </div>
           </>

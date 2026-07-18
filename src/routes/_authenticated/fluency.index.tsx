@@ -235,16 +235,15 @@ function FluencyPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="glass-panel p-8 text-center space-y-4">
-          <p className="label-mono text-[color:var(--color-gold)]">Session complète</p>
+          <p className="label-mono text-[color:var(--color-gold)]">Session Complete</p>
           <h1 className="text-3xl font-bold">Nicely done.</h1>
           <p className="text-muted-foreground">
-            {recordings.length} exercice{recordings.length > 1 ? "s" : ""} enregistré
-            {recordings.length > 1 ? "s" : ""}.
+            {recordings.length} exercise{recordings.length > 1 ? "s" : ""} recorded.
           </p>
           <div className="grid grid-cols-3 gap-3 pt-2">
-            <SummaryStat label="Fluidité" value={avg.fluency} />
-            <SummaryStat label="Confiance" value={avg.confidence} />
-            <SummaryStat label="Hésitations" value={avg.hesitation} />
+            <SummaryStat label="Fluency" value={avg.fluency} />
+            <SummaryStat label="Confidence" value={avg.confidence} />
+            <SummaryStat label="Hesitations" value={avg.hesitation} />
           </div>
           <div className="flex gap-3 justify-center pt-4">
             <button
@@ -256,13 +255,13 @@ function FluencyPage() {
               }}
               className="btn-crimson rounded-lg px-5 py-2.5"
             >
-              Retour à l'accueil
+              Back to Home
             </button>
             <Link
               to="/fluency/journal"
               className="rounded-lg px-5 py-2.5 border border-[color:var(--color-border)] hover:bg-white/5"
             >
-              Voir le journal
+              View Journal
             </Link>
           </div>
         </div>
@@ -304,8 +303,8 @@ function FluencyEntry({
           <p className="label-mono text-[color:var(--color-gold)]">Fluency Practice</p>
           <h1 className="text-3xl md:text-4xl font-bold mt-1">Speak like a native.</h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
-            Un module dédié à la fluidité orale et à la confiance à l'oral. Enregistre-toi,
-            réécoute, mesure ta progression.
+            A module dedicated to speaking fluency and oral confidence. Record yourself,
+            listen back, and measure your progress.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -313,7 +312,7 @@ function FluencyEntry({
             <Flame size={18} className="text-orange-400" />
             <div>
               <div className="text-lg font-bold leading-none">{streak}</div>
-              <div className="label-mono">jour{streak > 1 ? "s" : ""} d'affilée</div>
+              <div className="label-mono">day{streak !== 1 ? "s" : ""} streak</div>
             </div>
           </div>
           <Link
@@ -328,31 +327,31 @@ function FluencyEntry({
       {journeyCell && sit && cx ? (
         <div className="glass-panel p-6 md:p-8 border-[color:var(--color-crimson-glow)]">
           <div className="flex items-center gap-2 label-mono text-[color:var(--color-crimson-glow)]">
-            <Compass size={14} /> Parcours · {sit.icon} {sit.label} — {cx.label}
+            <Compass size={14} /> Path · {sit.icon} {sit.label} — {cx.label}
           </div>
           <h2 className="text-2xl font-bold mt-2">{cx.description}</h2>
           <p className="text-muted-foreground mt-2">{sit.description}</p>
           <p className="text-sm text-muted-foreground mt-3">
-            Progression : {journeyCell.sessionsCompleted}/5 sessions. Le vocabulaire déjà appris
-            sera intégré aux exercices.
+            Progress: {journeyCell.sessionsCompleted}/5 sessions. The vocabulary already learned
+            will be integrated into the exercises.
           </p>
           <Link
             to="/parcours"
             className="mt-3 inline-block text-xs text-muted-foreground underline hover:text-foreground"
           >
-            ← Retour au Parcours
+            ← Back to Path
           </Link>
         </div>
       ) : (
         <div className="glass-panel p-6 md:p-8">
-          <p className="label-mono">Thème de la semaine</p>
+          <p className="label-mono">Weekly Theme</p>
           <h2 className="text-2xl font-bold mt-1 text-[color:var(--color-gold)]">{theme.title}</h2>
           <p className="text-muted-foreground mt-2">{theme.description}</p>
         </div>
       )}
 
       <div>
-        <p className="label-mono mb-3">Durée de la session</p>
+        <p className="label-mono mb-3">Session Duration</p>
         <div className="grid md:grid-cols-3 gap-3">
           {(["quick", "standard", "deep"] as SessionLength[]).map((k) => {
             const cfg = SESSION_CONFIG[k];
@@ -372,7 +371,7 @@ function FluencyEntry({
                   <div className="label-mono">{cfg.minutes} min</div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {cfg.exerciseCount} exercice{cfg.exerciseCount > 1 ? "s" : ""} inclus
+                  {cfg.exerciseCount} exercise{cfg.exerciseCount > 1 ? "s" : ""} included
                 </p>
               </button>
             );
@@ -386,7 +385,7 @@ function FluencyEntry({
           disabled={starting}
           className="btn-crimson rounded-lg px-6 py-3 text-base font-semibold flex items-center gap-2 disabled:opacity-50"
         >
-          {starting ? "Préparation..." : "Commencer la session"} <ChevronRight size={18} />
+          {starting ? "Preparing..." : "Start Session"} <ChevronRight size={18} />
         </button>
       </div>
     </div>
@@ -433,7 +432,7 @@ function SessionRunner({
 
   async function startRecording() {
     if (typeof MediaRecorder === "undefined") {
-      toast.error("Ton navigateur ne supporte pas l'enregistrement audio.");
+      toast.error("Your browser does not support audio recording.");
       return;
     }
     try {
@@ -469,7 +468,7 @@ function SessionRunner({
       }, 250);
     } catch (err) {
       toast.error(
-        "Micro refusé. Autorise l'accès au microphone dans les paramètres du navigateur pour continuer.",
+        "Microphone access denied. Please allow microphone access in your browser settings to continue.",
       );
     }
   }
@@ -544,7 +543,7 @@ function SessionRunner({
 
       onComplete({ ...result, storagePath, recordingId, ratings });
     } catch (e) {
-      toast.error(e instanceof Error ? `Échec de l'upload : ${e.message}` : "Échec de l'upload");
+      toast.error(e instanceof Error ? `Upload failed: ${e.message}` : "Upload failed");
       // keep result so user can retry
     } finally {
       setSaving(false);
@@ -572,7 +571,7 @@ function SessionRunner({
     <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-300">
       <div className="flex items-center justify-between">
         <p className="label-mono">
-          Exercice {stepIndex + 1} / {totalSteps}
+          Exercise {stepIndex + 1} / {totalSteps}
         </p>
         <p className="label-mono text-[color:var(--color-gold)]">{labelType(exercise.type)}</p>
       </div>
@@ -580,7 +579,7 @@ function SessionRunner({
       <div className="glass-panel p-6 md:p-8">
         {exercise.type === "chunk_repeat" && exercise.chunks ? (
           <div className="space-y-3">
-            <p className="label-mono">Répète ces expressions à voix haute</p>
+            <p className="label-mono">Repeat these expressions out loud</p>
             <ul className="space-y-2">
               {exercise.chunks.map((c, i) => (
                 <li
@@ -591,7 +590,7 @@ function SessionRunner({
                   <button
                     onClick={() => speakChunk(c)}
                     className="text-muted-foreground hover:text-[color:var(--color-gold)] transition"
-                    title="Écouter"
+                    title="Listen"
                   >
                     <Volume2 size={18} />
                   </button>
@@ -618,7 +617,7 @@ function SessionRunner({
                 ? "bg-[color:var(--color-crimson)] text-white"
                 : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white"
             }`}
-            aria-label={recording ? "Arrêter l'enregistrement" : "Démarrer l'enregistrement"}
+            aria-label={recording ? "Stop recording" : "Start recording"}
           >
             {recording && (
               <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
@@ -635,21 +634,21 @@ function SessionRunner({
               )}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              {recording ? "Enregistrement en cours…" : "Appuie pour démarrer"}
+              {recording ? "Recording in progress…" : "Press to start"}
             </p>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="glass-panel p-5 space-y-3">
-            <p className="label-mono">Ta prise ({formatTime(result.durationSec)})</p>
+            <p className="label-mono">Your take ({formatTime(result.durationSec)})</p>
             <audio src={result.url} controls className="w-full" />
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={retryRecording}
                 className="rounded-lg px-3 py-2 border border-[color:var(--color-border)] hover:bg-white/5 text-sm flex items-center gap-2"
               >
-                <RotateCcw size={14} /> Recommencer
+                <RotateCcw size={14} /> Retry
               </button>
               <button
                 onClick={togglePin}
@@ -659,33 +658,33 @@ function SessionRunner({
                     : "border-[color:var(--color-border)] hover:bg-white/5"
                 }`}
               >
-                <Pin size={14} /> {result.pinned ? "Épinglé" : "Épingler"}
+                <Pin size={14} /> {result.pinned ? "Pinned" : "Pin"}
               </button>
             </div>
           </div>
 
           <div className="glass-panel p-5 space-y-4">
-            <p className="label-mono">Auto-évaluation</p>
+            <p className="label-mono">Self-evaluation</p>
             <RatingSlider
-              label="Fluidité"
+              label="Fluency"
               value={ratings.fluency}
               onChange={(v) => setRatings((r) => ({ ...r, fluency: v }))}
-              hintLow="très hésitant"
-              hintHigh="très fluide"
+              hintLow="very hesitant"
+              hintHigh="very fluent"
             />
             <RatingSlider
-              label="Confiance"
+              label="Confidence"
               value={ratings.confidence}
               onChange={(v) => setRatings((r) => ({ ...r, confidence: v }))}
-              hintLow="mal à l'aise"
-              hintHigh="confiant"
+              hintLow="uncomfortable"
+              hintHigh="confident"
             />
             <RatingSlider
-              label="Hésitations"
+              label="Hesitations"
               value={ratings.hesitation}
               onChange={(v) => setRatings((r) => ({ ...r, hesitation: v }))}
-              hintLow="beaucoup de blancs"
-              hintHigh="quasi aucun"
+              hintLow="many pauses"
+              hintHigh="almost none"
             />
             <div className="flex justify-end">
               <button
@@ -693,7 +692,7 @@ function SessionRunner({
                 disabled={saving}
                 className="btn-crimson rounded-lg px-5 py-2.5 disabled:opacity-50 flex items-center gap-2"
               >
-                {saving ? "Sauvegarde..." : "Suivant"} <ChevronRight size={16} />
+                {saving ? "Saving..." : "Next"} <ChevronRight size={16} />
               </button>
             </div>
           </div>

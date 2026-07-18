@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/library")({
   validateSearch: (s) => generateSearch.parse(s),
 });
 
-const LEVEL_ORDER = ["A1", "A2", "B1", "B2", "C1", "C2", "Autre"];
+const LEVEL_ORDER = ["A1", "A2", "B1", "B2", "C1", "C2", "Other"];
 type SortMode = "recent" | "alpha";
 
 function GeneratePage() {
@@ -146,7 +146,7 @@ function GeneratePage() {
   }, [history.data, q, filter, sort, reviewOnly]);
 
   function exportFiltered() {
-    if (filtered.length === 0) return toast.info("Aucune fiche à exporter");
+    if (filtered.length === 0) return toast.info("No cards to export");
     downloadTsv(
       filtered.map((c) => ({
         word: c.word,
@@ -164,7 +164,7 @@ function GeneratePage() {
         speaking_a2: "",
       })),
     );
-    toast.success(`${filtered.length} fiche(s) exportée(s)`);
+    toast.success(`${filtered.length} card(s) exported`);
   }
 
   // Group by level so the library reads as folders of dossiers instead of one long scroll.
@@ -174,7 +174,7 @@ function GeneratePage() {
     if (isSearching) return null;
     const byLevel = new Map<string, CardRow[]>();
     for (const c of filtered) {
-      const key = c.level && LEVEL_ORDER.includes(c.level) ? c.level : "Autre";
+      const key = c.level && LEVEL_ORDER.includes(c.level) ? c.level : "Other";
       if (!byLevel.has(key)) byLevel.set(key, []);
       byLevel.get(key)!.push(c);
     }
@@ -301,7 +301,7 @@ function GeneratePage() {
               onClick={exportFiltered}
               className="btn-crimson rounded-lg px-4 py-2 text-sm flex items-center gap-2"
             >
-              <Download size={14} /> Exporter la sélection
+              <Download size={14} /> Export selection
             </button>
             {(history.data?.length ?? 0) > 0 && (
               <button
@@ -370,7 +370,7 @@ function GeneratePage() {
                     : "border-[color:var(--color-border)] text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <AlertTriangle size={13} /> À revoir uniquement
+                <AlertTriangle size={13} /> Needs review only
               </button>
 
               <div className="flex gap-1 glass-panel-soft p-1 rounded-lg">
@@ -459,10 +459,10 @@ function GeneratePage() {
                         clipPath: "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)",
                       }}
                     >
-                      {key === "Autre" ? "?" : key}
+                      {key === "Other" ? "?" : key}
                     </span>
                     <span className="font-semibold text-sm text-left">
-                      {key === "Autre" ? "Sans niveau" : `Niveau ${key}`}
+                      {key === "Other" ? "No level" : `Level ${key}`}
                     </span>
                     <span className="text-xs text-muted-foreground ml-auto label-mono">
                       {cards.length} card{cards.length !== 1 ? "s" : ""}

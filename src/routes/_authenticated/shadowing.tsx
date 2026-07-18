@@ -276,7 +276,7 @@ function ShadowingPage() {
           <div className="flex items-center gap-2">
             <Info size={14} className="text-amber-400" />
             <p className="text-neutral-300">
-              Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la fluidité.
+              You skipped several Retell its recently — even 30 seconds helps a lot with fluency.
             </p>
           </div>
           <button onClick={dismissBanner} className="text-neutral-500 hover:text-white p-1">
@@ -590,7 +590,7 @@ function NoteItem({ note, videoId, onGenerate, onDelete }: { note: NoteRow; vide
 
   async function saveEdit() {
     const w = wordDraft.trim();
-    if (!w) return toast.error("Le mot ne peut pas être vide");
+    if (!w) return toast.error("The word cannot be empty");
     setSaving(true);
     const { error } = await supabase.from("shadowing_notes").update({ word: w, context: contextDraft.trim() || null }).eq("id", note.id);
     setSaving(false);

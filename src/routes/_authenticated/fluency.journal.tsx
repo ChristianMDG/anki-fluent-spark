@@ -80,21 +80,21 @@ function FluencyJournal() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="label-mono text-[color:var(--color-gold)]">Fluency Practice</p>
-          <h1 className="text-3xl font-bold mt-1">Journal de fluidité</h1>
+          <h1 className="text-3xl font-bold mt-1">Fluency Journal</h1>
         </div>
         <Link
           to="/fluency"
           className="rounded-lg px-4 py-2.5 border border-[color:var(--color-border)] hover:bg-white/5 flex items-center gap-2 text-sm"
         >
-          <ArrowLeft size={16} /> Retour au module
+          <ArrowLeft size={16} /> Back to module
         </Link>
       </div>
 
       <div className="glass-panel p-5">
-        <p className="label-mono mb-3">Tendance sur 3 mois (moyennes hebdomadaires)</p>
+        <p className="label-mono mb-3">3-Month Trend (weekly averages)</p>
         {trend.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Pas encore assez de données. Enregistre quelques sessions pour voir ta progression.
+            Not enough data yet. Record a few sessions to see your progress.
           </p>
         ) : (
           <div className="h-64 -mx-2">
@@ -115,7 +115,7 @@ function FluencyJournal() {
                 <Line
                   type="monotone"
                   dataKey="fluency"
-                  name="Fluidité"
+                  name="Fluency"
                   stroke="#dc2626"
                   strokeWidth={2}
                   dot={false}
@@ -123,7 +123,7 @@ function FluencyJournal() {
                 <Line
                   type="monotone"
                   dataKey="confidence"
-                  name="Confiance"
+                  name="Confidence"
                   stroke="#eab308"
                   strokeWidth={2}
                   dot={false}
@@ -131,7 +131,7 @@ function FluencyJournal() {
                 <Line
                   type="monotone"
                   dataKey="hesitation"
-                  name="Hésitations"
+                  name="Hesitations"
                   stroke="#94a3b8"
                   strokeWidth={2}
                   dot={false}
@@ -150,7 +150,7 @@ function FluencyJournal() {
             onChange={(e) => setTypeFilter(e.target.value)}
             className="bg-black/40 border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-sm"
           >
-            <option value="all">Tous</option>
+            <option value="all">All</option>
             <option value="free_talk">Free Talk</option>
             <option value="chunk_repeat">Chunk Repeat</option>
             <option value="dialogue">Dialogue</option>
@@ -158,7 +158,7 @@ function FluencyJournal() {
           </select>
         </div>
         <div>
-          <label className="label-mono block mb-1">Du</label>
+          <label className="label-mono block mb-1">From</label>
           <input
             type="date"
             value={from}
@@ -167,7 +167,7 @@ function FluencyJournal() {
           />
         </div>
         <div>
-          <label className="label-mono block mb-1">Au</label>
+          <label className="label-mono block mb-1">To</label>
           <input
             type="date"
             value={to}
@@ -179,7 +179,7 @@ function FluencyJournal() {
 
       {pinned.length > 0 && (
         <section className="space-y-3">
-          <h2 className="label-mono text-[color:var(--color-gold)]">📌 Épinglés</h2>
+          <h2 className="label-mono text-[color:var(--color-gold)]">📌 Pinned</h2>
           <div className="grid gap-3">
             {pinned.map((r) => (
               <RecordingCard key={r.id} row={r} onTogglePin={togglePin} />
@@ -191,7 +191,7 @@ function FluencyJournal() {
       <section className="space-y-4">
         {grouped.length === 0 ? (
           <div className="glass-panel p-8 text-center text-muted-foreground">
-            Aucun enregistrement pour ces filtres.
+            No recordings found for these filters.
           </div>
         ) : (
           grouped.map(([day, list]) => (
@@ -248,14 +248,14 @@ function RecordingCard({ row, onTogglePin }: { row: Row; onTogglePin: (r: Row) =
               ? "text-[color:var(--color-gold)] hover:bg-white/5"
               : "text-muted-foreground hover:text-foreground hover:bg-white/5"
           }`}
-          title={row.pinned ? "Désépingler" : "Épingler"}
+          title={row.pinned ? "Unpin" : "Pin"}
         >
           {row.pinned ? <Pin size={16} /> : <PinOff size={16} />}
         </button>
       </div>
 
       {expired ? (
-        <p className="text-xs text-muted-foreground italic">Enregistrement expiré (90 jours)</p>
+        <p className="text-xs text-muted-foreground italic">Recording expired (90 days)</p>
       ) : audioUrl ? (
         <audio src={audioUrl} controls className="w-full h-9" />
       ) : (
@@ -264,14 +264,14 @@ function RecordingCard({ row, onTogglePin }: { row: Row; onTogglePin: (r: Row) =
           disabled={loading}
           className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-border)] hover:bg-white/5"
         >
-          {loading ? "Chargement..." : "▶ Écouter"}
+          {loading ? "Loading..." : "▶ Listen"}
         </button>
       )}
 
       <div className="flex gap-2 flex-wrap pt-1">
-        <RatingBar label="Fluidité" value={row.fluency_rating} color="#dc2626" />
-        <RatingBar label="Confiance" value={row.confidence_rating} color="#eab308" />
-        <RatingBar label="Hésitations" value={row.hesitation_rating} color="#94a3b8" />
+        <RatingBar label="Fluency" value={row.fluency_rating} color="#dc2626" />
+        <RatingBar label="Confidence" value={row.confidence_rating} color="#eab308" />
+        <RatingBar label="Hesitations" value={row.hesitation_rating} color="#94a3b8" />
       </div>
     </div>
   );
@@ -328,7 +328,7 @@ function formatDay(d: string) {
   // components (not `new Date(d)`, which treats a bare date string as UTC
   // midnight and would shift the displayed weekday for the same reason).
   const [y, m, day] = d.split("-").map(Number);
-  return new Date(y, m - 1, day).toLocaleDateString("fr-FR", {
+  return new Date(y, m - 1, day).toLocaleDateString("en-US", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -366,5 +366,5 @@ function weekKey(d: Date) {
   const monday = new Date(d);
   const day = monday.getDay() || 7;
   monday.setDate(monday.getDate() - day + 1);
-  return monday.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  return monday.toLocaleDateString("en-US", { day: "2-digit", month: "2-digit" });
 }

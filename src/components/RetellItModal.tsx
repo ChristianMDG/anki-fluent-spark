@@ -68,7 +68,7 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
 
   async function startRecording() {
     if (typeof MediaRecorder === "undefined") {
-      toast.error("Ton navigateur ne supporte pas l'enregistrement audio.");
+      toast.error("Your browser does not support audio recording.");
       return;
     }
     try {
@@ -95,7 +95,7 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
         setElapsed(Math.round((Date.now() - startTsRef.current) / 1000));
       }, 250);
     } catch {
-      toast.error("Micro refusé. Autorise l'accès au microphone dans les paramètres du navigateur.");
+      toast.error("Microphone access denied. Please allow microphone access in your browser settings.");
     }
   }
 
@@ -158,11 +158,11 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
       });
       if (recErr) throw recErr;
 
-      toast.success("Retell enregistré — bien joué !");
+      toast.success("Retell saved — well done!");
       onSaved();
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Échec de la sauvegarde");
+      toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -182,12 +182,12 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="label-mono text-[color:var(--color-gold)]">🔁 Retell it</p>
-            <h2 className="text-2xl font-bold mt-1">Raconte ce que tu viens de voir</h2>
+            <h2 className="text-2xl font-bold mt-1">Tell what you just saw</h2>
           </div>
           <button
             onClick={onClose}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5"
-            aria-label="Fermer"
+            aria-label="Close"
           >
             <X size={18} />
           </button>
@@ -198,18 +198,18 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
             <img src={video.thumbnail_url} alt="" className="w-24 aspect-video object-cover rounded" />
           ) : (
             <div className="w-24 aspect-video bg-black/50 rounded flex items-center justify-center text-xs text-muted-foreground">
-              vidéo
+              video
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-sm truncate">{video.title || "Vidéo sans titre"}</p>
-            <p className="label-mono mt-1">Regardé : {formatTime(watchedSeconds)}</p>
+            <p className="text-sm truncate">{video.title || "Untitled video"}</p>
+            <p className="label-mono mt-1">Watched: {formatTime(watchedSeconds)}</p>
           </div>
         </div>
 
         {notes.length > 0 && (
           <div>
-            <p className="label-mono mb-2">Mots notés pendant cette session</p>
+            <p className="label-mono mb-2">Words noted during this session</p>
             <div className="flex gap-1.5 flex-wrap">
               {notes.map((n) => (
                 <span
@@ -224,8 +224,8 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
         )}
 
         <p className="text-sm text-muted-foreground">
-          Raconte en anglais, avec tes propres mots, ce que tu viens de voir. Pas besoin d'être
-          parfait — essaie d'utiliser au moins un des mots ci-dessus.
+          Tell in English, in your own words, what you just saw. No need to be
+          perfect — try to use at least one of the words above.
         </p>
 
         {!result ? (
@@ -237,7 +237,7 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
                   ? "bg-[color:var(--color-crimson)] text-white"
                   : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white"
               }`}
-              aria-label={recording ? "Arrêter" : "Démarrer"}
+              aria-label={recording ? "Stop" : "Start"}
             >
               {recording && (
                 <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
@@ -249,33 +249,33 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
             <div className="text-center">
               <div className="text-2xl font-mono font-bold">
                 {formatTime(elapsed)}
-                <span className="text-muted-foreground text-sm"> · repère {formatTime(suggested)}</span>
+                <span className="text-muted-foreground text-sm"> · target {formatTime(suggested)}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {recording ? "Enregistrement…" : "Appuie pour démarrer"}
+                {recording ? "Recording…" : "Press to start"}
               </p>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
             <div className="glass-panel-soft rounded-lg p-4 space-y-3">
-              <p className="label-mono">Ta prise ({formatTime(result.durationSec)})</p>
+              <p className="label-mono">Your take ({formatTime(result.durationSec)})</p>
               <audio src={result.url} controls className="w-full" />
               <button
                 onClick={retry}
                 className="rounded-lg px-3 py-1.5 border border-[color:var(--color-border)] hover:bg-white/5 text-xs flex items-center gap-1.5"
               >
-                <RotateCcw size={12} /> Recommencer
+                <RotateCcw size={12} /> Retry
               </button>
             </div>
 
             <div className="glass-panel-soft rounded-lg p-4 space-y-3">
-              <p className="label-mono">Auto-évaluation</p>
+              <p className="label-mono">Self-evaluation</p>
               {(
                 [
-                  ["fluency", "Fluidité", "hésitant", "fluide"],
-                  ["confidence", "Confiance", "mal à l'aise", "confiant"],
-                  ["hesitation", "Hésitations", "beaucoup", "quasi aucun"],
+                  ["fluency", "Fluency", "hesitant", "fluent"],
+                  ["confidence", "Confidence", "uncomfortable", "confident"],
+                  ["hesitation", "Hesitations", "many pauses", "almost none"],
                 ] as const
               ).map(([k, label, lo, hi]) => (
                 <div key={k}>
@@ -311,7 +311,7 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
             }}
             className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
           >
-            Passer cette étape
+            Skip this step
           </button>
           {result && (
             <button
@@ -319,7 +319,7 @@ export function RetellItModal({ open, video, watchedSeconds, notes, onClose, onS
               disabled={saving}
               className="btn-crimson rounded-lg px-5 py-2.5 disabled:opacity-50 flex items-center gap-2"
             >
-              {saving ? "Sauvegarde…" : "Sauvegarder"} <ChevronRight size={16} />
+              {saving ? "Saving…" : "Save"} <ChevronRight size={16} />
             </button>
           )}
         </div>
