@@ -67,7 +67,7 @@ export function ContributionGrid() {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + w * 7 + d);
         const inFuture = date.getTime() > today.getTime();
-        const count = inFuture ? 0 : counts.get(ymd(date)) ?? 0;
+        const count = inFuture ? 0 : (counts.get(ymd(date)) ?? 0);
         grid[d].push({ date, count, inFuture });
         if (!labeled && date.getDate() <= 7 && !inFuture) {
           monthLabels.push(date.toLocaleDateString("fr-FR", { month: "short" }));
@@ -123,7 +123,10 @@ export function ContributionGrid() {
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <span>Moins</span>
           {[0, 1, 4, 8].map((n) => (
-            <span key={n} className={`inline-block w-2.5 h-2.5 rounded-[3px] border ${intensityClass(n)}`} />
+            <span
+              key={n}
+              className={`inline-block w-2.5 h-2.5 rounded-[3px] border ${intensityClass(n)}`}
+            />
           ))}
           <span>Plus</span>
         </div>
@@ -139,10 +142,18 @@ export function ContributionGrid() {
             ))}
           </div>
           <div className="flex gap-[3px]">
-            <div className="flex flex-col gap-[3px] pr-1 text-[9px] text-muted-foreground justify-between h-[calc(7*11px+6*3px)]">
-              <span>L</span>
-              <span>M</span>
-              <span>V</span>
+            <div className="flex flex-col gap-[3px] pr-1 text-[9px] text-muted-foreground">
+              {/* Row indices: 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat.
+                  Label only Mon/Wed/Fri, each on its own 11px row so it lines
+                  up with the matching row in the grid below (previously these
+                  3 labels were spread with justify-between over the full
+                  height, which visually mismatched them against the actual
+                  Sun-first rows). */}
+              {["", "L", "", "M", "", "V", ""].map((lbl, i) => (
+                <span key={i} className="h-[11px] leading-[11px]">
+                  {lbl}
+                </span>
+              ))}
             </div>
             <div className="flex gap-[3px]">
               {Array.from({ length: monthLabels.length }, (_, w) => (

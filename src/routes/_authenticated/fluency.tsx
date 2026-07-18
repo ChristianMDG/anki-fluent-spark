@@ -4,18 +4,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { generateFluencyPrompt } from "@/lib/fluency.functions";
-import {
-  currentTheme,
-  SESSION_CONFIG,
-  type SessionLength,
-} from "@/lib/fluency-themes";
-import {
-  SITUATION_META,
-  COMPLEXITY_META,
-  type JourneySituation,
-} from "@/lib/journey";
+import { currentTheme, SESSION_CONFIG, type SessionLength } from "@/lib/fluency-themes";
+import { SITUATION_META, COMPLEXITY_META, type JourneySituation } from "@/lib/journey";
 import { z } from "zod";
-import { Mic, Square, RotateCcw, Pin, BookOpen, Volume2, Flame, ChevronRight, Compass } from "lucide-react";
+import {
+  Mic,
+  Square,
+  RotateCcw,
+  Pin,
+  BookOpen,
+  Volume2,
+  Flame,
+  ChevronRight,
+  Compass,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fluency")({
@@ -109,12 +111,7 @@ function FluencyPage() {
       if (type === "chunk_repeat") {
         const picked = chunks.length
           ? shuffle(chunks).slice(0, Math.min(5, Math.max(3, chunks.length)))
-          : [
-              "on the other hand",
-              "to be honest",
-              "at the end of the day",
-              "as far as I know",
-            ];
+          : ["on the other hand", "to be honest", "at the end of the day", "as far as I know"];
         out.push({ type, prompt: picked.join(" • "), chunks: picked });
       } else {
         try {
@@ -183,10 +180,7 @@ function FluencyPage() {
         .eq("id", sessionId);
     }
     if (cell) {
-      await supabase
-        .from("journey_cells")
-        .update({ sessions_completed: (cell.sessions_completed ?? 0) + 1 })
-        .eq("id", cell.id);
+      await supabase.rpc("increment_journey_cell_session", { _cell_id: cell.id });
       qc.invalidateQueries({ queryKey: ["journey-cells"] });
       qc.invalidateQueries({ queryKey: ["journey-cell", cell.id] });
     }
@@ -310,7 +304,8 @@ function FluencyEntry({
           <p className="label-mono text-[color:var(--color-gold)]">Fluency Practice</p>
           <h1 className="text-3xl md:text-4xl font-bold mt-1">Speak like a native.</h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
-            Un module dédié à la fluidité orale et à la confiance à l'oral. Enregistre-toi, réécoute, mesure ta progression.
+            Un module dédié à la fluidité orale et à la confiance à l'oral. Enregistre-toi,
+            réécoute, mesure ta progression.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -338,7 +333,8 @@ function FluencyEntry({
           <h2 className="text-2xl font-bold mt-2">{cx.description}</h2>
           <p className="text-muted-foreground mt-2">{sit.description}</p>
           <p className="text-sm text-muted-foreground mt-3">
-            Progression : {journeyCell.sessionsCompleted}/5 sessions. Le vocabulaire déjà appris sera intégré aux exercices.
+            Progression : {journeyCell.sessionsCompleted}/5 sessions. Le vocabulaire déjà appris
+            sera intégré aux exercices.
           </p>
           <Link
             to="/parcours"
@@ -548,9 +544,7 @@ function SessionRunner({
 
       onComplete({ ...result, storagePath, recordingId, ratings });
     } catch (e) {
-      toast.error(
-        e instanceof Error ? `Échec de l'upload : ${e.message}` : "Échec de l'upload",
-      );
+      toast.error(e instanceof Error ? `Échec de l'upload : ${e.message}` : "Échec de l'upload");
       // keep result so user can retry
     } finally {
       setSaving(false);

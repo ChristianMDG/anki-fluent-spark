@@ -6,8 +6,20 @@ import { useServerFn } from "@tanstack/react-start";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import { toast } from "sonner";
 import {
-  Youtube, Upload, Rewind, FastForward, Play, Pause, Zap, X, Check, Plus, Trash2,
-  CheckCircle2, Info, Pencil,
+  Youtube,
+  Upload,
+  Rewind,
+  FastForward,
+  Play,
+  Pause,
+  Zap,
+  X,
+  Check,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Info,
+  Pencil,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
@@ -77,14 +89,9 @@ function ShadowingPage() {
       since.setDate(since.getDate() - 7);
       const { data } = await supabase
         .from("shadowing_videos")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("retell_skipped_count,last_watched_at" as any)
+        .select("retell_skipped_count,last_watched_at")
         .gte("last_watched_at", since.toISOString());
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return ((data ?? []) as any[]).reduce(
-        (s, r) => s + (Number(r.retell_skipped_count) || 0),
-        0,
-      );
+      return (data ?? []).reduce((s, r) => s + (Number(r.retell_skipped_count) || 0), 0);
     },
     staleTime: 60_000,
   });
@@ -132,16 +139,13 @@ function ShadowingPage() {
     try {
       const { data } = await supabase
         .from("shadowing_videos")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("retell_skipped_count" as any)
+        .select("retell_skipped_count")
         .eq("id", retellVideo.id)
         .single();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cur = Number((data as any)?.retell_skipped_count) || 0;
+      const cur = Number(data?.retell_skipped_count) || 0;
       await supabase
         .from("shadowing_videos")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ retell_skipped_count: cur + 1 } as any)
+        .update({ retell_skipped_count: cur + 1 })
         .eq("id", retellVideo.id);
       qc.invalidateQueries({ queryKey: ["retell-skip-sum-7d"] });
     } catch {
@@ -213,7 +217,9 @@ function ShadowingPage() {
         .select()
         .single();
       if (error) throw error;
-      const signed = await supabase.storage.from("shadowing-videos").createSignedUrl(path, 3600 * 4);
+      const signed = await supabase.storage
+        .from("shadowing-videos")
+        .createSignedUrl(path, 3600 * 4);
       player.setVideo(data as VideoRow, signed.data?.signedUrl ?? null);
       qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
@@ -265,7 +271,8 @@ function ShadowingPage() {
         <div className="glass-panel-soft rounded-lg px-4 py-3 flex items-start gap-3 text-sm border border-amber-500/30">
           <Info size={16} className="text-amber-400 mt-0.5 shrink-0" />
           <p className="flex-1 text-muted-foreground">
-            Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la fluidité.
+            Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la
+            fluidité.
           </p>
           <button
             onClick={dismissBanner}
@@ -353,13 +360,22 @@ function ShadowingPage() {
               {/* Persistent player is projected into this slot by VideoPlayerProvider */}
               <div ref={slotRef} className="aspect-video bg-black rounded-lg overflow-hidden" />
               <div className="flex items-center justify-center gap-2">
-                <button onClick={() => player.seek(-5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
+                <button
+                  onClick={() => player.seek(-5)}
+                  className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1"
+                >
                   <Rewind size={16} /> −5s
                 </button>
-                <button onClick={player.playPause} className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1">
+                <button
+                  onClick={player.playPause}
+                  className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1"
+                >
                   <Play size={16} /> / <Pause size={16} />
                 </button>
-                <button onClick={() => player.seek(5)} className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1">
+                <button
+                  onClick={() => player.seek(5)}
+                  className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1"
+                >
                   +5s <FastForward size={16} />
                 </button>
               </div>
@@ -392,10 +408,7 @@ function ShadowingPage() {
                   key={v.id}
                   className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
                 >
-                  <button
-                    onClick={() => loadFromHistory(v)}
-                    className="w-full text-left"
-                  >
+                  <button onClick={() => loadFromHistory(v)} className="w-full text-left">
                     <div className="aspect-video bg-black">
                       {v.thumbnail_url ? (
                         <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
@@ -418,9 +431,7 @@ function ShadowingPage() {
                 </div>
               ))}
               {videos.data?.length === 0 && (
-                <p className="text-sm text-muted-foreground py-4">
-                  Your history will appear here.
-                </p>
+                <p className="text-sm text-muted-foreground py-4">Your history will appear here.</p>
               )}
             </div>
           </div>
@@ -446,8 +457,6 @@ function ShadowingPage() {
     </div>
   );
 }
-
-
 
 function NotesPanel({ videoId }: { videoId: string | null }) {
   const qc = useQueryClient();
@@ -570,9 +579,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
           />
         ))}
         {videoId && notes.data?.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-6">
-            Add words as you watch.
-          </p>
+          <p className="text-xs text-muted-foreground text-center py-6">Add words as you watch.</p>
         )}
       </div>
 
@@ -693,9 +700,7 @@ function NoteItem({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="font-medium truncate">{note.word}</p>
-            {note.context && (
-              <p className="text-xs text-muted-foreground mt-0.5">{note.context}</p>
-            )}
+            {note.context && <p className="text-xs text-muted-foreground mt-0.5">{note.context}</p>}
           </div>
           <div className="flex gap-1 shrink-0">
             {note.card_id ? (

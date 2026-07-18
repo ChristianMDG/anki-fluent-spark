@@ -27,16 +27,14 @@ export function ListenVsProduceCard() {
       const [videos, recs] = await Promise.all([
         supabase
           .from("shadowing_videos")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .select("watch_duration_seconds,last_watched_at" as any)
+          .select("watch_duration_seconds,last_watched_at")
           .gte("last_watched_at", startIso),
         supabase
           .from("fluency_recordings")
           .select("duration_seconds,created_at")
           .gte("created_at", startIso),
       ]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const vRows = ((videos.data ?? []) as any[]).filter((r) => r.last_watched_at);
+      const vRows = (videos.data ?? []).filter((r) => r.last_watched_at);
       const rRows = recs.data ?? [];
 
       const perDay: { listen: number; produce: number }[] = Array.from({ length: 7 }, () => ({

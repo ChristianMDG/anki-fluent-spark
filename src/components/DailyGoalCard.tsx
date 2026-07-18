@@ -33,13 +33,21 @@ export function DailyGoalCard() {
   const count = useQuery({
     queryKey: ["daily_count", date],
     queryFn: async () => {
-      const start = `${date}T00:00:00`;
-      const end = `${date}T23:59:59.999`;
+      // Build local-midnight boundaries as real Date objects, then convert to
+      // UTC ISO strings. Sending naive "YYYY-MM-DDTHH:mm:ss" strings without a
+      // timezone offset makes Postgres interpret them as UTC, which silently
+      // shifts the "today" window for any user not in UTC+0 (e.g. UTC+3 in
+      // Antananarivo) — cards created in the first/last hours of the local
+      // day were being mis-bucketed into the wrong day.
+      const startLocal = new Date();
+      startLocal.setHours(0, 0, 0, 0);
+      const endLocal = new Date();
+      endLocal.setHours(23, 59, 59, 999);
       const { count } = await supabase
         .from("cards")
         .select("id", { count: "exact", head: true })
-        .gte("created_at", start)
-        .lte("created_at", end);
+        .gte("created_at", startLocal.toISOString())
+        .lte("created_at", endLocal.toISOString());
       return count ?? 0;
     },
     refetchOnWindowFocus: true,
@@ -56,10 +64,7 @@ export function DailyGoalCard() {
     if (!user) return;
     const { error } = await supabase
       .from("daily_goals")
-      .upsert(
-        { user_id: user.id, date, target_count: n },
-        { onConflict: "user_id,date" },
-      );
+      .upsert({ user_id: user.id, date, target_count: n }, { onConflict: "user_id,date" });
     if (error) return toast.error(error.message);
     setEditing(false);
     qc.invalidateQueries({ queryKey: ["daily_goal", date] });

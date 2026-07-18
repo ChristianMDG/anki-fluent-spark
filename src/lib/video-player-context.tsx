@@ -66,6 +66,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
   const [slotEl, setSlotEl] = useState<HTMLElement | null>(null);
   const [sessionStartAt, setSessionStartAt] = useState<string | null>(null);
   const [sessionWatched, setSessionWatched] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -100,6 +101,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     setSessionWatched(0);
     cumulRef.current = Number(video.watch_duration_seconds) || 0;
     playingRef.current = false;
+    setIsPlaying(false);
   }, [video?.id]);
 
   // YouTube: enable postMessage events
@@ -121,6 +123,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
         const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
         if (d?.info?.playerState !== undefined) {
           playingRef.current = d.info.playerState === 1;
+          setIsPlaying(d.info.playerState === 1);
         }
         if (d?.info?.currentTime !== undefined) {
           (window as unknown as { __ytTime: number }).__ytTime = d.info.currentTime;
@@ -142,8 +145,14 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     if (!video || video.source_type !== "upload") return;
     const el = videoRef.current;
     if (!el) return;
-    const onPlay = () => (playingRef.current = true);
-    const onPause = () => (playingRef.current = false);
+    const onPlay = () => {
+      playingRef.current = true;
+      setIsPlaying(true);
+    };
+    const onPause = () => {
+      playingRef.current = false;
+      setIsPlaying(false);
+    };
     el.addEventListener("play", onPlay);
     el.addEventListener("playing", onPlay);
     el.addEventListener("pause", onPause);
@@ -167,11 +176,10 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
       try {
         await supabase
           .from("shadowing_videos")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .update({
             watch_duration_seconds: cumulRef.current,
             last_watched_at: new Date().toISOString(),
-          } as any)
+          })
           .eq("id", vid.id);
       } catch {
         /* ignore */
@@ -267,7 +275,17 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
       sessionWatched,
       sessionStartAt,
     }),
-    [video, uploadedUrl, setVideo, clearVideo, registerSlot, seek, playPause, sessionWatched, sessionStartAt],
+    [
+      video,
+      uploadedUrl,
+      setVideo,
+      clearVideo,
+      registerSlot,
+      seek,
+      playPause,
+      sessionWatched,
+      sessionStartAt,
+    ],
   );
 
   const navigate = useNavigate();
@@ -309,16 +327,10 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
               <button
                 onClick={playPause}
                 className="p-1.5 rounded hover:bg-white/10 text-[color:var(--color-gold)]"
-                aria-label="Play/Pause"
+                aria-label={isPlaying ? "Pause" : "Play"}
+                title={isPlaying ? "Pause" : "Play"}
               >
-                <Play size={14} />
-              </button>
-              <button
-                onClick={playPause}
-                className="p-1.5 rounded hover:bg-white/10 text-muted-foreground"
-                aria-label="Pause"
-              >
-                <Pause size={14} />
+                {isPlaying ? <Pause size={14} /> : <Play size={14} />}
               </button>
               <div className="flex-1 min-w-0 text-[11px] truncate px-1">{video.title}</div>
               <button
