@@ -318,7 +318,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
               />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Chargement…
+                Loading…
               </div>
             )}
           </div>
@@ -336,15 +336,15 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
               <button
                 onClick={() => navigate({ to: "/shadowing" })}
                 className="p-1.5 rounded hover:bg-white/10 text-[color:var(--color-gold)]"
-                aria-label="Retour au shadowing"
-                title="Retour au shadowing"
+                aria-label="Return to shadowing"
+                title="Return to shadowing"
               >
                 <Maximize2 size={13} />
               </button>
               <button
                 onClick={clearVideo}
                 className="p-1.5 rounded hover:bg-white/10 text-muted-foreground"
-                aria-label="Fermer"
+                aria-label="Close"
               >
                 <X size={13} />
               </button>

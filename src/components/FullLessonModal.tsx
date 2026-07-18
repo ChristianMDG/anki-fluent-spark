@@ -131,7 +131,7 @@ export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, 
                 onClick={clearReview}
                 className="hidden sm:flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 transition"
               >
-                <Check size={13} /> Marquer révisé
+                <Check size={13} /> Mark as reviewed
               </button>
             )}
             <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg">

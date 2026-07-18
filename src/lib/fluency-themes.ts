@@ -2,32 +2,32 @@ export const FLUENCY_THEMES = [
   {
     key: "storytelling",
     title: "Everyday storytelling",
-    description: "Raconter sa journée, ses habitudes, les petites histoires du quotidien.",
+    description: "Talk about your day, your habits, little everyday stories.",
   },
   {
     key: "opinions",
     title: "Opinions & arguments",
-    description: "Donner un avis clair et le justifier avec des exemples concrets.",
+    description: "Give a clear opinion and support it with concrete examples.",
   },
   {
     key: "hypothetical",
     title: "Hypothetical situations",
-    description: "S'entraîner au conditionnel : « what would you do if… ».",
+    description: "Practice the conditional: 'what would you do if...'.",
   },
   {
     key: "describing",
     title: "Describing people & places",
-    description: "Faire des descriptions riches et vivantes de personnes et de lieux.",
+    description: "Make rich and vivid descriptions of people and places.",
   },
   {
     key: "past",
     title: "Past experiences & memories",
-    description: "Raconter au passé un souvenir marquant, une expérience vécue.",
+    description: "Tell a striking memory or personal experience in the past tense.",
   },
   {
     key: "future",
     title: "Future plans & aspirations",
-    description: "Se projeter, parler de ses objectifs, de ses envies futures.",
+    description: "Project yourself, talk about your objectives, future desires.",
   },
 ] as const;
 
@@ -53,7 +53,7 @@ export const SESSION_CONFIG: Record<
   SessionLength,
   { label: string; minutes: number; exerciseCount: number; freeTalkSeconds: number }
 > = {
-  quick: { label: "Rapide", minutes: 3, exerciseCount: 1, freeTalkSeconds: 60 },
+  quick: { label: "Quick", minutes: 3, exerciseCount: 1, freeTalkSeconds: 60 },
   standard: { label: "Standard", minutes: 7, exerciseCount: 2, freeTalkSeconds: 90 },
-  deep: { label: "Approfondi", minutes: 15, exerciseCount: 3, freeTalkSeconds: 120 },
+  deep: { label: "Deep", minutes: 15, exerciseCount: 3, freeTalkSeconds: 120 },
 };

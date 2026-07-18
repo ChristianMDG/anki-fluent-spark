@@ -16,6 +16,7 @@ import {
   Volume2,
   Flame,
   ChevronRight,
+  ArrowLeft,
   Compass,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -44,12 +45,15 @@ interface RecordingState {
   pinned: boolean;
 }
 
+type SessionMode = "mixed" | "free_talk" | "chunk_repeat";
+
 function FluencyPage() {
   const search = Route.useSearch();
   const journeyCellId = search.journeyCell;
   const theme = useMemo(() => currentTheme(), []);
   const [phase, setPhase] = useState<"entry" | "session" | "summary">("entry");
   const [length, setLength] = useState<SessionLength>("standard");
+  const [sessionMode, setSessionMode] = useState<SessionMode>("mixed");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [recordings, setRecordings] = useState<RecordingState[]>([]);
@@ -100,7 +104,11 @@ function FluencyPage() {
   }
 
   async function buildExercises(count: number): Promise<Exercise[]> {
-    const order: ExerciseType[] = ["free_talk", "chunk_repeat", "dialogue"];
+    // In "mixed" mode, cycle through all 3 exercise types like before. In a
+    // focused mode ("free_talk" or "chunk_repeat"), every exercise in the
+    // session is that single type instead of rotating.
+    const order: ExerciseType[] =
+      sessionMode === "mixed" ? ["free_talk", "chunk_repeat", "dialogue"] : [sessionMode];
     const chunks = await loadChunksPool();
     const situation = (cell?.situation ?? null) as JourneySituation | null;
     const complexityLevel = cell?.complexity_level ?? undefined;
@@ -193,6 +201,8 @@ function FluencyPage() {
         theme={theme}
         length={length}
         setLength={setLength}
+        sessionMode={sessionMode}
+        setSessionMode={setSessionMode}
         onStart={() => startSession.mutate()}
         starting={startSession.isPending}
         streak={streak.data ?? 0}
@@ -225,6 +235,13 @@ function FluencyPage() {
           setRecordings((prev) => [...prev, rec]);
           if (step + 1 < exercises.length) setStep(step + 1);
           else finishSession();
+        }}
+        onBack={() => {
+          setPhase("entry");
+          setRecordings([]);
+          setExercises([]);
+          setSessionId(null);
+          setStep(0);
         }}
       />
     );
@@ -276,6 +293,8 @@ function FluencyEntry({
   theme,
   length,
   setLength,
+  sessionMode,
+  setSessionMode,
   onStart,
   starting,
   streak,
@@ -284,6 +303,8 @@ function FluencyEntry({
   theme: { title: string; description: string };
   length: SessionLength;
   setLength: (l: SessionLength) => void;
+  sessionMode: SessionMode;
+  setSessionMode: (m: SessionMode) => void;
   onStart: () => void;
   starting: boolean;
   streak: number;
@@ -379,6 +400,47 @@ function FluencyEntry({
         </div>
       </div>
 
+      <div>
+        <p className="label-mono mb-3">Session Type</p>
+        <div className="grid md:grid-cols-3 gap-3">
+          {(
+            [
+              {
+                key: "mixed" as const,
+                label: "Mixed",
+                desc: "Rotates through Free Talk, Chunk Repeat, and Dialogue.",
+              },
+              {
+                key: "free_talk" as const,
+                label: "Free Talk only",
+                desc: "Every exercise is an open-ended speaking prompt.",
+              },
+              {
+                key: "chunk_repeat" as const,
+                label: "Chunk Repeat only",
+                desc: "Every exercise is a set of expressions to repeat aloud.",
+              },
+            ] as const
+          ).map((m) => {
+            const active = sessionMode === m.key;
+            return (
+              <button
+                key={m.key}
+                onClick={() => setSessionMode(m.key)}
+                className={`glass-panel p-5 text-left transition ${
+                  active
+                    ? "border-[color:var(--color-crimson-glow)] -translate-y-0.5"
+                    : "hover:-translate-y-0.5"
+                }`}
+              >
+                <div className="text-lg font-semibold">{m.label}</div>
+                <p className="text-sm text-muted-foreground mt-1">{m.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex justify-end">
         <button
           onClick={onStart}
@@ -401,6 +463,7 @@ function SessionRunner({
   totalSteps,
   freeTalkSeconds,
   onComplete,
+  onBack,
 }: {
   exercise: Exercise;
   sessionId: string;
@@ -409,6 +472,7 @@ function SessionRunner({
   totalSteps: number;
   freeTalkSeconds: number;
   onComplete: (r: RecordingState) => void;
+  onBack: () => void;
 }) {
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recording, setRecording] = useState(false);
@@ -486,6 +550,20 @@ function SessionRunner({
     if (result) URL.revokeObjectURL(result.url);
     setResult(null);
     setElapsed(0);
+  }
+
+  function handleBack() {
+    // Recording in progress or an unsaved take sitting in the review step
+    // would be silently discarded by navigating away — confirm first so a
+    // stray click doesn't lose audio the person just recorded.
+    if (recording || result) {
+      const ok = window.confirm(
+        "You have an unsaved recording for this exercise. Going back will discard it. Continue?",
+      );
+      if (!ok) return;
+      if (recording) stopRecording();
+    }
+    onBack();
   }
 
   async function uploadAndFinalize() {
@@ -569,7 +647,14 @@ function SessionRunner({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={handleBack}
+          className="rounded-lg px-3 py-2 border border-[color:var(--color-border)] hover:bg-white/5 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
+          aria-label="Back to session setup"
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
         <p className="label-mono">
           Exercise {stepIndex + 1} / {totalSteps}
         </p>

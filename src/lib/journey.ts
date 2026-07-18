@@ -17,25 +17,25 @@ export const SITUATION_META: Record<
     description: "Small talk, meeting people, casual social interactions.",
   },
   transactional: {
-    label: "Transactionnel",
+    label: "Transactional",
     icon: "🛒",
-    description: "Boutiques, restaurants, voyage, démarches concrètes du quotidien.",
+    description: "Shops, restaurants, travel, concrete daily tasks.",
   },
   professional: {
-    label: "Professionnel",
+    label: "Professional",
     icon: "💼",
     description:
-      "Réunions, échanges entre collègues, discussions au travail (hors entretien).",
+      "Meetings, peer interactions, workplace discussions (excluding interviews).",
   },
   emotional: {
-    label: "Émotionnel",
+    label: "Emotional",
     icon: "💗",
-    description: "Parler d'émotions, soutenir, gérer un désaccord, être empathique.",
+    description: "Discussing emotions, offering support, managing conflict, showing empathy.",
   },
   narrative: {
-    label: "Narratif / créatif",
+    label: "Narrative / Creative",
     icon: "📖",
-    description: "Raconter une anecdote, une scène imaginaire, un souvenir marquant.",
+    description: "Telling an anecdote, an imaginary scene, a striking memory.",
   },
 };
 
@@ -43,11 +43,11 @@ export const COMPLEXITY_META: Record<
   number,
   { label: string; description: string }
 > = {
-  1: { label: "Décrire", description: "Décrire objets, personnes, routines au présent." },
-  2: { label: "Raconter", description: "Enchaîner un récit au passé, avec connecteurs." },
-  3: { label: "Argumenter", description: "Donner un avis et le justifier avec des exemples." },
-  4: { label: "Hypothèses", description: "Utiliser les conditionnels et se projeter." },
-  5: { label: "Nuance", description: "Nuancer, moduler le ton, jouer sur les registres." },
+  1: { label: "Describe", description: "Describe objects, people, routines in the present tense." },
+  2: { label: "Narrate", description: "String together a past narrative with linking words." },
+  3: { label: "Argue", description: "Express an opinion and support it with examples." },
+  4: { label: "Hypothesize", description: "Use conditionals and project scenarios." },
+  5: { label: "Nuance", description: "Nuance ideas, modulate tone, play on different registers." },
 };
 
 export type JourneyStatus = "locked" | "available" | "in_progress" | "mastered";
