@@ -33,12 +33,6 @@ export function DailyGoalCard() {
   const count = useQuery({
     queryKey: ["daily_count", date],
     queryFn: async () => {
-      // Build local-midnight boundaries as real Date objects, then convert to
-      // UTC ISO strings. Sending naive "YYYY-MM-DDTHH:mm:ss" strings without a
-      // timezone offset makes Postgres interpret them as UTC, which silently
-      // shifts the "today" window for any user not in UTC+0 (e.g. UTC+3 in
-      // Antananarivo) — cards created in the first/last hours of the local
-      // day were being mis-bucketed into the wrong day.
       const startLocal = new Date();
       startLocal.setHours(0, 0, 0, 0);
       const endLocal = new Date();
@@ -68,68 +62,82 @@ export function DailyGoalCard() {
     if (error) return toast.error(error.message);
     setEditing(false);
     qc.invalidateQueries({ queryKey: ["daily_goal", date] });
-    toast.success("Objectif mis à jour");
+    toast.success("Objective updated successfully");
   }
 
   return (
-    <div className="glass-panel p-5 md:p-6 space-y-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="w-full flex flex-col justify-between h-full space-y-3 min-h-0 overflow-hidden">
+      {/* Internal Header Grid */}
+      <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
-          <Target size={18} className="text-[color:var(--color-gold)]" />
-          <p className="label-mono">Objectif du jour</p>
+          <Target size={14} className="text-[var(--color-gold)] drop-shadow-[0_0_4px_rgba(212,175,55,0.4)]" />
+          <h3 className="font-audiowide text-[10px] tracking-wider uppercase text-neutral-400">
+            Operational Objective
+          </h3>
         </div>
+        
         {!editing ? (
           <button
             onClick={() => {
               setDraft(String(target));
               setEditing(true);
             }}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition"
+            className="font-audiowide flex items-center gap-1 text-[9px] uppercase tracking-widest text-neutral-500 hover:text-[var(--color-gold)] transition-colors duration-300"
           >
-            <Pencil size={12} /> Modifier
+            <Pencil size={10} /> Configure
           </button>
         ) : (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 animate-fade-in">
             <input
               type="number"
               min={1}
               max={500}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              className="w-16 glass-panel-soft text-xs px-2 py-1 rounded-md"
+              className="w-14 bg-black/60 border border border-[var(--color-border)]/60 text-white font-audiowide text-[10px] text-center px-1.5 py-0.5 rounded-md focus:outline-none focus:border-[var(--color-crimson)]"
             />
             <button
               onClick={saveGoal}
-              className="p-1.5 rounded-md bg-[color:var(--color-crimson)]/40 hover:bg-[color:var(--color-crimson)]/60"
+              className="p-1 rounded-md bg-[var(--color-crimson)]/20 hover:bg-[var(--color-crimson)] text-[var(--color-crimson)] hover:text-white border border-[var(--color-crimson)]/30 transition-all duration-300"
             >
-              <Check size={13} />
+              <Check size={11} />
             </button>
           </div>
         )}
       </div>
 
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl md:text-4xl font-bold text-[color:var(--color-gold)]">
+      {/* Primary Metrics Layer */}
+      <div className="flex items-baseline gap-1.5 shrink-0">
+        <span className="font-audiowide text-2xl md:text-3xl font-black text-white tracking-wide drop-shadow-[0_0_10px_rgba(255,255,255,0.05)]">
           {generated}
         </span>
-        <span className="text-lg text-muted-foreground">/ {target} mots</span>
+        <span className="font-audiowide text-[10px] uppercase tracking-widest text-neutral-500">
+          / {target} SECURED
+        </span>
       </div>
 
-      <div className="h-2.5 rounded-full bg-white/5 overflow-hidden">
+      {/* HUD System Gauge */}
+      <div className="w-full h-2 bg-black/60 rounded-full border border-white/5 p-[1px] overflow-hidden shrink-0">
         <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{
+          className="h-full bg-gradient-to-r from-[var(--color-crimson)] to-[var(--color-gold)] rounded-full transition-all duration-500 ease-out"
+          style={{ 
             width: `${pct}%`,
-            background:
-              "linear-gradient(90deg, var(--color-crimson) 0%, var(--color-crimson-glow) 100%)",
+            boxShadow: pct > 0 ? '0 0 8px var(--color-crimson)' : 'none'
           }}
         />
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        {reached
-          ? "🎉 Objectif atteint aujourd'hui !"
-          : `Encore ${target - generated} mot${target - generated > 1 ? "s" : ""} pour atteindre ton objectif`}
+      {/* Mission Status Strip */}
+      <p className="font-audiowide text-[9px] uppercase tracking-[0.12em] shrink-0 text-neutral-400">
+        {reached ? (
+          <span className="text-[var(--color-gold)] drop-shadow-[0_0_6px_rgba(212,175,55,0.3)]">
+            ✓ Mission Accomplished: Threshold Secured
+          </span>
+        ) : (
+          <span>
+            Analysis: <span className="text-[var(--color-crimson)]">{target - generated}</span> more word{target - generated > 1 ? "s" : ""} required
+          </span>
+        )}
       </p>
     </div>
   );

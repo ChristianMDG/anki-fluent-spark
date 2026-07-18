@@ -20,6 +20,10 @@ import {
   CheckCircle2,
   Info,
   Pencil,
+  Radio,
+  Tv,
+  NotebookTabs,
+  Layers,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
@@ -30,7 +34,6 @@ export const Route = createFileRoute("/_authenticated/shadowing")({
 });
 
 const SKIP_BANNER_KEY = "retell-skip-banner-dismissed-at";
-
 type VideoRow = PersistentVideo;
 
 interface NoteRow {
@@ -63,7 +66,6 @@ function ShadowingPage() {
   const [uploading, setUploading] = useState(false);
 
   const currentVideo = player.video;
-  const uploadedUrl = player.uploadedUrl;
   const sessionWatched = player.sessionWatched;
   const sessionStartAt = player.sessionStartAt;
 
@@ -103,7 +105,7 @@ function ShadowingPage() {
         .from("shadowing_videos")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(12);
       if (error) throw error;
       return data as VideoRow[];
     },
@@ -266,178 +268,161 @@ function ShadowingPage() {
   }
 
   return (
-    <div className="max-w-[1280px] mx-auto space-y-6">
+    <div className="max-w-[1600px] mx-auto px-4 h-[calc(100vh-7rem)] min-h-[650px] flex flex-col gap-4 font-mono text-white overflow-hidden">
+      
+      {/* Banner info */}
       {showSkipBanner && (
-        <div className="glass-panel-soft rounded-lg px-4 py-3 flex items-start gap-3 text-sm border border-amber-500/30">
-          <Info size={16} className="text-amber-400 mt-0.5 shrink-0" />
-          <p className="flex-1 text-muted-foreground">
-            Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la
-            fluidité.
-          </p>
-          <button
-            onClick={dismissBanner}
-            className="text-muted-foreground hover:text-foreground p-1 -m-1"
-            aria-label="Fermer"
-          >
-            <X size={14} />
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2 text-xs flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <Info size={14} className="text-amber-400" />
+            <p className="text-neutral-300">
+              Tu as passé plusieurs Retell it récemment — même 30 secondes aident beaucoup pour la fluidité.
+            </p>
+          </div>
+          <button onClick={dismissBanner} className="text-neutral-500 hover:text-white p-1">
+            <X size={12} />
           </button>
         </div>
       )}
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
-          <p className="label-mono text-[color:var(--color-gold)]">Shadowing</p>
-          <h1 className="text-3xl font-bold mt-1">Train your ear and your mouth</h1>
-        </div>
-        <Link
-          to="/history"
-          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
-        >
-          View full history →
-        </Link>
-      </div>
 
-      <div className="grid lg:grid-cols-[1fr_380px] gap-6">
-        {/* Video column */}
-        <div className="space-y-4 min-w-0">
-          <div className="glass-panel p-4">
-            <div className="flex gap-1 mb-3 p-1 bg-black/30 rounded-lg w-fit">
-              <button
-                onClick={() => setMode("youtube")}
-                className={`px-3 py-1.5 rounded text-sm flex items-center gap-1.5 ${
-                  mode === "youtube" ? "bg-[color:var(--color-crimson)]/40" : ""
-                }`}
-              >
-                <Youtube size={14} /> YouTube link
-              </button>
-              <button
-                onClick={() => setMode("upload")}
-                className={`px-3 py-1.5 rounded text-sm flex items-center gap-1.5 ${
-                  mode === "upload" ? "bg-[color:var(--color-crimson)]/40" : ""
-                }`}
-              >
-                <Upload size={14} /> Upload
-              </button>
-            </div>
+      {/* Main Responsive Grid Workspace */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 min-h-0">
+        
+        {/* LEFT COMPONENT: Immersive Player Suite & Horizontal Feed */}
+        <div className="flex flex-col gap-4 min-h-0">
+          
+          {/* Main Stage (Video Player / Injection Node) */}
+          <div className="flex-1 bg-gradient-to-br from-[#120403]/60 via-[#0d0605]/40 to-black/60 backdrop-blur-md border border-[var(--color-border)]/40 p-4 rounded-2xl flex flex-col justify-between min-h-0 relative shadow-2xl">
+            {currentVideo ? (
+              <div className="flex flex-col h-full justify-between gap-3 min-h-0">
+                {/* Telemetry Header */}
+                <div className="flex items-center justify-between text-[10px] tracking-wider uppercase">
+                  <div className="flex items-center gap-2 text-[var(--color-crimson)]">
+                    <Radio size={12} className="animate-pulse" />
+                    <span className="font-audiowide text-[var(--color-gold)]">Cinema Workspace</span>
+                  </div>
+                  <span className="text-neutral-500 truncate max-w-[300px]">{currentVideo.title}</span>
+                </div>
 
-            {mode === "youtube" ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  loadYoutube();
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  value={ytUrl}
-                  onChange={(e) => setYtUrl(e.target.value)}
-                  placeholder="https://youtube.com/watch?v=…"
-                  className="flex-1 glass-panel-soft px-3 py-2 rounded-lg text-sm"
-                />
-                <button className="btn-crimson rounded-lg px-4 py-2 text-sm">Load</button>
-              </form>
+                {/* Highly Scaled Video Screen Container */}
+                <div className="flex-1 bg-black rounded-xl overflow-hidden border border-white/5 relative flex items-center justify-center min-h-0 group shadow-inner">
+                  <div ref={slotRef} className="w-full h-full aspect-video" />
+                </div>
+
+                {/* Command Deck Controls & Telemetry */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/5 pt-3">
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => player.seek(-5)} className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1">
+                      <Rewind size={12} /> -5s
+                    </button>
+                    <button onClick={player.playPause} className="bg-[var(--color-crimson)] px-4 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1 shadow-[0_0_10px_rgba(220,38,38,0.2)] hover:opacity-90">
+                      <Play size={11} className="fill-current" /> / <Pause size={11} />
+                    </button>
+                    <button onClick={() => player.seek(5)} className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1">
+                      +5s <FastForward size={12} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                    <span className="text-[11px] text-[var(--color-gold)] font-audiowide bg-neutral-950/80 px-2.5 py-1.5 border border-white/5 rounded-md">
+                      SESSION: {Math.floor(sessionWatched / 60)}:{(sessionWatched % 60).toString().padStart(2, "0")}
+                    </span>
+                    <button
+                      onClick={maybeOfferRetell}
+                      disabled={sessionWatched < 90}
+                      className="bg-neutral-950/60 border border-emerald-500/30 text-emerald-400 disabled:opacity-30 disabled:border-white/5 disabled:text-neutral-500 px-3 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition font-bold"
+                    >
+                      <CheckCircle2 size={13} /> Complete
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
-              <label className="block glass-panel-soft border-dashed border-2 border-[color:var(--color-border)] rounded-lg p-6 text-center cursor-pointer hover:border-[color:var(--color-crimson-glow)] transition">
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime,.mov"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleUpload(f);
-                  }}
-                />
-                <Upload className="mx-auto mb-2 text-[color:var(--color-gold)]" size={28} />
-                <p className="text-sm">
-                  {uploading ? "Uploading…" : "Drop a video or click to browse"}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">.mp4, .webm, .mov — max 200 Mo</p>
-              </label>
+              /* Core Empty Injector Hub */
+              <div className="h-full flex flex-col justify-between p-4">
+                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                  <Tv size={14} className="text-[var(--color-crimson)] animate-pulse" />
+                  <span className="font-audiowide text-xs text-[var(--color-gold)] uppercase tracking-wider">Feed Injector Core</span>
+                </div>
+
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-neutral-600 max-w-sm mx-auto">
+                  <Tv size={28} className="stroke-[1.2] mb-2 opacity-40 text-[var(--color-crimson)]" />
+                  <p className="text-xs uppercase font-bold tracking-wider">Workspace Idle</p>
+                  <p className="text-[10px] opacity-70 mt-1">Provide a cryptographic URL stream or drop a spatial media asset file below to initialize shadowing mode.</p>
+                </div>
+
+                <div className="bg-neutral-950/60 border border-white/5 p-4 rounded-xl">
+                  <div className="flex gap-2 mb-3 bg-black/40 p-0.5 rounded-md w-fit border border-white/5">
+                    <button onClick={() => setMode("youtube")} className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider rounded transition ${mode === "youtube" ? "bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 text-white" : "text-neutral-500"}`}>
+                      YouTube
+                    </button>
+                    <button onClick={() => setMode("upload")} className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider rounded transition ${mode === "upload" ? "bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 text-white" : "text-neutral-500"}`}>
+                      Upload
+                    </button>
+                  </div>
+
+                  {mode === "youtube" ? (
+                    <form onSubmit={(e) => { e.preventDefault(); loadYoutube(); }} className="flex gap-2">
+                      <input value={ytUrl} onChange={(e) => setYtUrl(e.target.value)} placeholder="Target URL: https://youtube.com/watch?v=..." className="flex-1 bg-neutral-950 border border-white/5 px-3 py-2 text-xs text-white placeholder-neutral-600 rounded-lg focus:outline-none focus:border-[var(--color-crimson)]" />
+                      <button className="bg-[var(--color-crimson)] px-4 py-2 text-xs font-bold rounded-lg hover:opacity-95 transition shrink-0">Load Stream</button>
+                    </form>
+                  ) : (
+                    <label className="block border border-dashed border-white/10 rounded-lg p-5 text-center cursor-pointer hover:border-[var(--color-crimson)] bg-neutral-950/40 transition">
+                      <input type="file" accept="video/mp4,video/webm,video/quicktime,.mov" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                      <Upload className="mx-auto mb-1 text-[var(--color-gold)]" size={20} />
+                      <p className="text-xs">{uploading ? "Mounting asset..." : "Drop file asset or browse"}</p>
+                      <p className="text-[10px] text-neutral-600 mt-0.5">MP4, WEBM, MOV (Max 200MB)</p>
+                    </label>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
-          {currentVideo && (
-            <div className="glass-panel p-4 space-y-3">
-              {/* Persistent player is projected into this slot by VideoPlayerProvider */}
-              <div ref={slotRef} className="aspect-video bg-black rounded-lg overflow-hidden" />
-              <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={() => player.seek(-5)}
-                  className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1"
-                >
-                  <Rewind size={16} /> −5s
-                </button>
-                <button
-                  onClick={player.playPause}
-                  className="btn-crimson rounded-lg px-4 py-2 flex items-center gap-1"
-                >
-                  <Play size={16} /> / <Pause size={16} />
-                </button>
-                <button
-                  onClick={() => player.seek(5)}
-                  className="btn-crimson rounded-lg px-3 py-2 flex items-center gap-1"
-                >
-                  +5s <FastForward size={16} />
-                </button>
-              </div>
-              <p className="text-sm text-muted-foreground text-center truncate">
-                {currentVideo.title}
-              </p>
-              <div className="flex items-center justify-between gap-3 pt-2 border-t border-[color:var(--color-border)]">
-                <p className="label-mono">
-                  Session : {Math.floor(sessionWatched / 60)}:
-                  {(sessionWatched % 60).toString().padStart(2, "0")}
-                </p>
-                <button
-                  onClick={maybeOfferRetell}
-                  className="rounded-lg px-3 py-1.5 text-sm border border-[color:var(--color-crimson-glow)] hover:bg-[color:var(--color-crimson)]/15 flex items-center gap-2 disabled:opacity-40"
-                  disabled={sessionWatched < 90}
-                  title={sessionWatched < 90 ? "Regarde au moins 90s pour proposer Retell it" : ""}
-                >
-                  <CheckCircle2 size={14} /> Terminer la session
-                </button>
-              </div>
+          {/* Compact Horizontal History Carousel */}
+          <div className="bg-neutral-950/30 border border-white/5 p-3 rounded-2xl flex flex-col gap-2 shrink-0">
+            <div className="flex items-center justify-between text-[10px] text-neutral-500 uppercase">
+              <span className="font-bold text-neutral-400 flex items-center gap-1.5"><Layers size={11} /> Segment Logs</span>
+              <Link to="/history" className="hover:text-white transition underline underline-offset-2">Archive ledger →</Link>
             </div>
-          )}
 
-          {/* History strip */}
-          <div>
-            <p className="label-mono mb-2">Recent history</p>
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {videos.data?.map((v) => (
-                <div
-                  key={v.id}
-                  className="shrink-0 w-40 glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
-                >
-                  <button onClick={() => loadFromHistory(v)} className="w-full text-left">
-                    <div className="aspect-video bg-black">
-                      {v.thumbnail_url ? (
-                        <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                          {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2 text-xs truncate">{v.title || "Untitled"}</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => deleteVideo(v, e)}
-                    className="absolute top-1.5 right-1.5 p-1.5 rounded-md bg-black/80 backdrop-blur text-muted-foreground hover:text-red-400 hover:bg-red-500/20 opacity-70 md:opacity-0 md:group-hover:opacity-100 transition z-10"
-                    aria-label="Delete video"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
+            <div className="flex gap-3 overflow-x-auto pb-1 custom-scrollbar scroll-smooth">
+              {videos.data?.map((v) => {
+                const isActive = currentVideo?.id === v.id;
+                return (
+                  <div key={v.id} className={`shrink-0 w-36 bg-neutral-950 border rounded-xl overflow-hidden group relative transition ${isActive ? "border-[var(--color-gold)]/80 shadow-[0_0_8px_rgba(212,175,55,0.15)]" : "border-white/5 hover:border-neutral-700"}`}>
+                    <button onClick={() => loadFromHistory(v)} className="w-full text-left flex flex-col">
+                      <div className="aspect-video bg-neutral-900 relative w-full overflow-hidden">
+                        {v.thumbnail_url ? (
+                          <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-[9px] text-neutral-500 uppercase">
+                            {v.source_type === "upload" ? "📁 Local File" : "▶ Stream"}
+                          </div>
+                        )}
+                        {isActive && (
+                          <span className="absolute top-1 left-1 font-audiowide text-[7px] tracking-wider px-1 py-0.5 rounded bg-[var(--color-gold)]/20 text-[var(--color-gold)] border border-[var(--color-gold)]/30">
+                            LIVE
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-1.5 text-[10px] font-mono truncate text-neutral-400 group-hover:text-white">{v.title || "Untitled Node"}</div>
+                    </button>
+                    <button type="button" onClick={(e) => deleteVideo(v, e)} className="absolute top-1 right-1 p-1 rounded bg-black/80 backdrop-blur text-neutral-500 hover:text-red-400 transition opacity-0 group-hover:opacity-100">
+                      <Trash2 size={10} />
+                    </button>
+                  </div>
+                );
+              })}
               {videos.data?.length === 0 && (
-                <p className="text-sm text-muted-foreground py-4">Your history will appear here.</p>
+                <p className="text-[10px] text-neutral-600 uppercase tracking-wider py-2 px-1">Index logs empty.</p>
               )}
             </div>
           </div>
+
         </div>
 
-        {/* Notes column */}
+        {/* RIGHT COMPONENT: Data Notes Core Panel */}
         <NotesPanel videoId={currentVideo?.id ?? null} />
       </div>
 
@@ -535,81 +520,62 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
   const pendingCount = (notes.data ?? []).filter((n) => !n.card_id).length;
 
   return (
-    <div className="glass-panel p-4 flex flex-col gap-3 max-h-[calc(100vh-160px)]">
-      <p className="label-mono">My notes</p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!wordInput.trim() || !videoId) return;
-          addNote.mutate();
-        }}
-        className="space-y-2"
-      >
-        <input
-          value={wordInput}
-          onChange={(e) => setWordInput(e.target.value)}
-          placeholder={videoId ? "Word or expression" : "Load a video first"}
-          disabled={!videoId}
-          className="w-full glass-panel-soft px-3 py-2 rounded-lg text-sm"
-        />
-        <input
-          value={contextInput}
-          onChange={(e) => setContextInput(e.target.value)}
-          placeholder="Context (optional)"
-          disabled={!videoId}
-          className="w-full glass-panel-soft px-3 py-2 rounded-lg text-xs"
-        />
-        <button
-          type="submit"
-          disabled={!videoId || !wordInput.trim() || addNote.isPending}
-          className="btn-crimson rounded-lg px-3 py-2 text-sm w-full flex items-center justify-center gap-2 disabled:opacity-50"
-        >
-          <Plus size={14} /> {addNote.isPending ? "Adding…" : "Create note"}
-        </button>
-      </form>
+    <div className="bg-gradient-to-br from-[#120403]/40 via-[#0d0605]/30 to-black/40 border border-[var(--color-border)]/40 p-4 rounded-2xl flex flex-col gap-3 h-full min-h-0 overflow-hidden shadow-2xl relative">
+      <div className="pointer-events-none absolute -top-10 -right-10 w-32 h-32 bg-[color:var(--color-gold)]/5 rounded-full blur-2xl" />
 
-      <div className="flex-1 overflow-y-auto space-y-2 -mx-1 px-1">
-        {(notes.data ?? []).map((n) => (
-          <NoteItem
-            key={n.id}
-            note={n}
-            videoId={videoId}
-            onGenerate={() => generateForNote(n)}
-            onDelete={() => deleteNote(n.id)}
-          />
-        ))}
-        {videoId && notes.data?.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-6">Add words as you watch.</p>
+      <div className="flex items-center justify-between border-b border-white/5 pb-2 shrink-0">
+        <div className="flex items-center gap-1.5 text-neutral-400 font-bold uppercase text-[10px]">
+          <NotebookTabs size={13} className="text-[var(--color-gold)]" />
+          <span>Biometric Logs</span>
+        </div>
+        {(notes.data?.length ?? 0) > 0 && (
+          <span className="text-[9px] bg-neutral-950 px-2 py-0.5 rounded border border-white/5 text-neutral-400">
+            {notes.data.length - pendingCount}/{notes.data.length} Done
+          </span>
         )}
       </div>
 
-      {pendingCount > 0 && (
-        <button
-          onClick={generateAll}
-          disabled={batchProgress !== null}
-          className="btn-crimson rounded-lg px-3 py-2.5 text-sm flex items-center justify-center gap-2"
-        >
-          <Zap size={14} />
-          {batchProgress
-            ? `${batchProgress.done}/${batchProgress.total}…`
-            : `Generate all cards (${pendingCount})`}
+      {/* Input Injection Module */}
+      <form onSubmit={(e) => { e.preventDefault(); if (!wordInput.trim() || !videoId) return; addNote.mutate(); }} className="space-y-2 shrink-0">
+        <input value={wordInput} onChange={(e) => setWordInput(e.target.value)} placeholder={videoId ? "Expression token..." : "Load stream to record..."} disabled={!videoId} className="w-full bg-neutral-950 border border-white/5 px-3 py-2 rounded-lg text-xs focus:outline-none focus:border-[var(--color-crimson)] text-white placeholder-neutral-600" />
+        <input value={contextInput} onChange={(e) => setContextInput(e.target.value)} placeholder="Context matrix (optional)..." disabled={!videoId} className="w-full bg-neutral-950 border border-white/5 px-3 py-2 rounded-lg text-[11px] focus:outline-none focus:border-[var(--color-crimson)] text-white placeholder-neutral-600" />
+        <button type="submit" disabled={!videoId || !wordInput.trim() || addNote.isPending} className="bg-[var(--color-crimson)] disabled:bg-neutral-900 disabled:text-neutral-600 text-white rounded-lg px-3 py-2 text-xs font-bold w-full flex items-center justify-center gap-1.5 transition">
+          <Plus size={13} /> {addNote.isPending ? "Adding Token..." : "Register Note"}
         </button>
+      </form>
+
+      {/* Vertical Autonomously Scrollable Stack */}
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar min-h-0">
+        {(notes.data ?? []).map((n) => (
+          <NoteItem key={n.id} note={n} videoId={videoId} onGenerate={() => generateForNote(n)} onDelete={() => deleteNote(n.id)} />
+        ))}
+        {videoId && notes.data?.length === 0 && (
+          <div className="border border-dashed border-white/5 p-6 rounded-xl text-center text-neutral-600 my-4 bg-neutral-950/20">
+            <p className="text-[10px] uppercase font-bold tracking-wider">Log Array Void</p>
+            <p className="text-[9px] opacity-70 mt-0.5">Capture unfamiliar lexical markers dynamically during training.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Bulk Compiler Control */}
+      {pendingCount > 0 && (
+        <div className="space-y-2 pt-2 border-t border-white/5 shrink-0">
+          {batchProgress && (
+            <div className="h-1 bg-black rounded-full overflow-hidden border border-white/5">
+              <div className="h-full bg-gradient-to-r from-[var(--color-crimson)] to-[var(--color-gold)] transition-all duration-300" style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }} />
+            </div>
+          )}
+          <button onClick={generateAll} disabled={batchProgress !== null} className="bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 hover:bg-[var(--color-crimson)]/30 text-[var(--color-gold)] font-bold text-xs rounded-lg px-3 py-2.5 flex items-center justify-center gap-2 w-full transition shadow-[0_0_15px_rgba(220,38,38,0.05)]">
+            <Zap size={13} />
+            {batchProgress ? `Processing [${batchProgress.done}/${batchProgress.total}]` : `Compile All Queued [${pendingCount}]`}
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-function NoteItem({
-  note,
-  videoId,
-  onGenerate,
-  onDelete,
-}: {
-  note: NoteRow;
-  videoId: string | null;
-  onGenerate: () => void;
-  onDelete: () => void;
-}) {
+function NoteItem({ note, videoId, onGenerate, onDelete }: { note: NoteRow; videoId: string | null; onGenerate: () => void; onDelete: () => void; }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [wordDraft, setWordDraft] = useState(note.word);
@@ -622,114 +588,53 @@ function NoteItem({
     setEditing(true);
   }
 
-  function cancelEdit() {
-    setEditing(false);
-  }
-
   async function saveEdit() {
     const w = wordDraft.trim();
     if (!w) return toast.error("Le mot ne peut pas être vide");
     setSaving(true);
-    const { error } = await supabase
-      .from("shadowing_notes")
-      .update({ word: w, context: contextDraft.trim() || null })
-      .eq("id", note.id);
+    const { error } = await supabase.from("shadowing_notes").update({ word: w, context: contextDraft.trim() || null }).eq("id", note.id);
     setSaving(false);
     if (error) return toast.error(error.message);
-    if (note.card_id && w !== note.word) {
-      toast.info(
-        `Cette note a déjà une fiche pour "${note.word}" — la modifier ne changera pas la fiche existante.`,
-      );
-    }
     setEditing(false);
     qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
   }
 
+  async function handleConfirmDelete() {
+    const ok = await confirmDialog({
+      title: "Delete this note?",
+      description: `"${note.word}" will be permanently removed from this video's logs.`,
+      confirmLabel: "Delete note",
+    });
+    if (ok) {
+      onDelete();
+    }
+  }
+
   return (
-    <div
-      className={`p-3 rounded-lg border transition ${
-        note.card_id
-          ? "border-emerald-500/40 bg-emerald-950/10"
-          : "border-[color:var(--color-border)]"
-      } ${editing ? "!opacity-100" : note.card_id ? "opacity-70" : ""}`}
-    >
+    <div className={`p-2.5 rounded-xl border border-white/5 bg-neutral-950/40 border-l-2 transition ${note.card_id ? "border-l-emerald-500/80 bg-emerald-950/5" : "border-l-[var(--color-gold)]/60"} ${note.card_id && !editing ? "opacity-60" : ""}`}>
       {editing ? (
         <div className="space-y-2">
-          <input
-            autoFocus
-            value={wordDraft}
-            onChange={(e) => setWordDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") saveEdit();
-              if (e.key === "Escape") cancelEdit();
-            }}
-            className="w-full glass-panel-soft px-2 py-1.5 rounded text-sm font-medium"
-            placeholder="Mot"
-          />
-          <input
-            value={contextDraft}
-            onChange={(e) => setContextDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") saveEdit();
-              if (e.key === "Escape") cancelEdit();
-            }}
-            className="w-full glass-panel-soft px-2 py-1.5 rounded text-xs"
-            placeholder="Contexte"
-          />
-          <div className="flex items-center justify-end gap-1">
-            <button
-              onClick={saveEdit}
-              disabled={saving}
-              className="p-1.5 hover:bg-white/10 rounded text-emerald-400"
-              aria-label="Valider"
-              title="Valider (Entrée)"
-            >
-              <Check size={14} />
-            </button>
-            <button
-              onClick={cancelEdit}
-              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
-              aria-label="Annuler"
-              title="Annuler (Échap)"
-            >
-              <X size={14} />
-            </button>
+          <input autoFocus value={wordDraft} onChange={(e) => setWordDraft(e.target.value)} className="w-full bg-neutral-950 border border-white/5 px-2 py-1 rounded text-xs text-white focus:outline-none" />
+          <input value={contextDraft} onChange={(e) => setContextDraft(e.target.value)} className="w-full bg-neutral-950 border border-white/5 px-2 py-1 rounded text-[11px] text-neutral-400 focus:outline-none" />
+          <div className="flex justify-end gap-1 text-[10px]">
+            <button onClick={saveEdit} disabled={saving} className="text-emerald-400 px-2 py-0.5 bg-neutral-900 border border-white/5 rounded">Save</button>
+            <button onClick={() => setEditing(false)} className="text-neutral-400 px-2 py-0.5 bg-neutral-900 border border-white/5 rounded">Cancel</button>
           </div>
         </div>
       ) : (
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium truncate">{note.word}</p>
-            {note.context && <p className="text-xs text-muted-foreground mt-0.5">{note.context}</p>}
+        <div className="flex items-start justify-between gap-3 w-full min-w-0">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-xs font-bold truncate text-white select-all">{note.word}</p>
+            {note.context && <p className="text-[10px] text-neutral-500 line-clamp-2 leading-relaxed break-words">{note.context}</p>}
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1.5 items-center shrink-0 self-start bg-neutral-950/60 p-0.5 rounded-md border border-white/5">
             {note.card_id ? (
-              <span className="text-xs text-emerald-400 flex items-center gap-1">
-                <Check size={12} /> Card
-              </span>
+              <Check size={11} className="text-emerald-400 mx-1 shrink-0" />
             ) : (
-              <button
-                onClick={onGenerate}
-                title="Generate a card"
-                className="p-1.5 hover:bg-white/10 rounded text-[color:var(--color-gold)]"
-              >
-                <Zap size={14} />
-              </button>
+              <button onClick={onGenerate} title="Compile Flashcard" className="p-1 hover:bg-white/5 text-[var(--color-gold)] rounded shrink-0"><Zap size={12} /></button>
             )}
-            <button
-              onClick={startEdit}
-              title="Modifier"
-              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
-            >
-              <Pencil size={13} />
-            </button>
-            <button
-              onClick={onDelete}
-              title="Supprimer"
-              className="p-1.5 hover:bg-white/10 rounded text-muted-foreground"
-            >
-              <X size={14} />
-            </button>
+            <button onClick={startEdit} title="Modify Node" className="p-1 hover:bg-white/5 text-neutral-400 hover:text-white rounded shrink-0"><Pencil size={11} /></button>
+            <button onClick={handleConfirmDelete} title="Purge Node" className="p-1 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded shrink-0 transition-colors"><X size={12} /></button>
           </div>
         </div>
       )}
@@ -737,7 +642,6 @@ function NoteItem({
   );
 }
 
-// Track current time for YouTube via postMessage listener
 export function useYouTubeTimeTracker() {
   useEffect(() => {
     const handler = (e: MessageEvent) => {

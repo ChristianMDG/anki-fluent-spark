@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Flame } from "lucide-react";
+import { Flame, Trophy, Activity } from "lucide-react";
 import { useMemo } from "react";
 
 const WEEKS = 17; // ~4 months
@@ -13,11 +13,12 @@ function ymd(d: Date) {
   return `${y}-${m}-${dd}`;
 }
 
+// Couleurs d'intensité adaptées au thème Akatsuki (Bases de sombres mats vers Crimson pur)
 function intensityClass(n: number) {
-  if (n === 0) return "bg-white/[0.04] border-white/[0.03]";
-  if (n <= 2) return "bg-[color:var(--color-crimson)]/25 border-[color:var(--color-crimson)]/30";
-  if (n <= 5) return "bg-[color:var(--color-crimson)]/55 border-[color:var(--color-crimson)]/50";
-  return "bg-[color:var(--color-crimson)] border-[color:var(--color-crimson-glow)] shadow-[0_0_6px_var(--color-crimson-glow)]";
+  if (n === 0) return "bg-neutral-950/80 border-white/5";
+  if (n <= 2) return "bg-[var(--color-crimson)]/20 border-[var(--color-crimson)]/30";
+  if (n <= 5) return "bg-[var(--color-crimson)]/50 border-[var(--color-crimson)]/60";
+  return "bg-[var(--color-crimson)] border-red-400 shadow-[0_0_8px_var(--color-crimson)]";
 }
 
 export function ContributionGrid() {
@@ -42,12 +43,10 @@ export function ContributionGrid() {
 
   const { grid, monthLabels, currentStreak, bestStreak, todayCount } = useMemo(() => {
     const counts = q.data ?? new Map<string, number>();
-    // Build days from oldest to newest ending today.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    // Align end to Saturday-of-current-week for a clean rightmost column
+    
     const startDate = new Date(today);
-    // start at (DAYS-1) days before, then push back to Sunday
     startDate.setDate(startDate.getDate() - (DAYS - 1));
     const startDow = startDate.getDay(); // 0=Sun
     startDate.setDate(startDate.getDate() - startDow);
@@ -55,7 +54,6 @@ export function ContributionGrid() {
     const totalDays = Math.ceil((today.getTime() - startDate.getTime()) / 86400000) + 1;
     const weeks = Math.ceil((totalDays + startDate.getDay()) / 7);
 
-    // grid[dow][week]
     const grid: { date: Date; count: number; inFuture: boolean }[][] = Array.from(
       { length: 7 },
       () => [],
@@ -70,22 +68,21 @@ export function ContributionGrid() {
         const count = inFuture ? 0 : (counts.get(ymd(date)) ?? 0);
         grid[d].push({ date, count, inFuture });
         if (!labeled && date.getDate() <= 7 && !inFuture) {
-          monthLabels.push(date.toLocaleDateString("fr-FR", { month: "short" }));
+          monthLabels.push(date.toLocaleDateString("en-US", { month: "short" }));
           labeled = true;
         }
       }
       if (!labeled) monthLabels.push(null);
     }
 
-    // Streak calc: walk back from today
+    // Streak calc
     let cur = 0;
     const cursor = new Date(today);
     while ((counts.get(ymd(cursor)) ?? 0) > 0) {
       cur += 1;
       cursor.setDate(cursor.getDate() - 1);
     }
-    // If nothing today, current streak = 0 but we check "was active yesterday"
-    // Best streak (over all days we have)
+
     let best = 0;
     let run = 0;
     const dates = [...counts.keys()].sort();
@@ -103,70 +100,80 @@ export function ContributionGrid() {
   }, [q.data]);
 
   return (
-    <section className="glass-panel p-5 md:p-6">
-      <div className="flex items-end justify-between flex-wrap gap-3 mb-4">
+    <section className="p-5 md:p-6 bg-gradient-to-br from-[#120403]/60 via-[#0d0605]/40 to-black/60 backdrop-blur-md border border-[var(--color-border)]/40 rounded-2xl shadow-xl w-full flex flex-col justify-between h-full min-h-0 overflow-hidden">
+      
+      {/* Top Header Row with Streak & Record metrics */}
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
         <div>
-          <p className="label-mono text-[color:var(--color-gold)]">Activité</p>
-          <div className="flex items-baseline gap-3 mt-1">
-            <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-              <Flame size={22} className="text-[color:var(--color-crimson-glow)]" />
-              {currentStreak} jour{currentStreak > 1 ? "s" : ""} de suite
+          <div className="flex items-center gap-2 mb-1">
+            <Activity size={13} className="text-[var(--color-gold)]" />
+            <p className="font-audiowide text-[11px] tracking-wider uppercase text-[var(--color-gold)]">Activity Registry</p>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-xl md:text-2xl font-bold font-audiowide flex items-center gap-2 text-white uppercase tracking-tight">
+              <Flame size={20} className={currentStreak > 0 ? "text-[var(--color-crimson)] animate-pulse" : "text-neutral-600"} style={{ fill: currentStreak > 0 ? "currentColor" : "none" }} />
+              {currentStreak} <span className="text-xs font-mono text-neutral-400 lowercase font-normal">day{currentStreak !== 1 && 's'} streak</span>
             </h2>
-            <span className="text-xs text-muted-foreground">Record : {bestStreak} j</span>
+            <span className="text-[10px] font-mono text-neutral-400 bg-neutral-950/60 border border-white/5 px-2 py-0.5 rounded flex items-center gap-1">
+              <Trophy size={10} className="text-[var(--color-gold)]" /> RECORD: {bestStreak}D
+            </span>
           </div>
           {todayCount === 0 && currentStreak === 0 && bestStreak > 0 && (
-            <p className="text-xs text-amber-300/80 mt-1.5">
-              Génère un mot aujourd'hui pour garder ton streak !
-            </p>
+            <div className="flex items-center gap-1.5 mt-2 text-[10px] font-audiowide text-amber-500/90 tracking-wide uppercase">
+              <span className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
+              Generate a word today to initialize system streak!
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span>Moins</span>
+
+        {/* Legend Panel */}
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-neutral-500 bg-neutral-950/40 border border-white/5 px-2 py-1 rounded-md">
+          <span>Less</span>
           {[0, 1, 4, 8].map((n) => (
             <span
               key={n}
               className={`inline-block w-2.5 h-2.5 rounded-[3px] border ${intensityClass(n)}`}
             />
           ))}
-          <span>Plus</span>
+          <span>More</span>
         </div>
       </div>
 
-      <div className="overflow-x-auto -mx-2 px-2 pb-1">
+      {/* Heatmap Matrix Display Section */}
+      <div className="overflow-x-auto -mx-2 px-2 pb-1 scrollbar-thin scrollbar-thumb-white/10">
         <div className="min-w-fit">
-          <div className="flex gap-[3px] pl-6 mb-1 text-[10px] text-muted-foreground">
+          {/* Months labels */}
+          <div className="flex gap-[3px] pl-6 mb-1 text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider">
             {monthLabels.map((m, i) => (
               <div key={i} className="w-[11px] text-left">
                 {m ? <span className="inline-block -translate-x-1">{m}</span> : null}
               </div>
             ))}
           </div>
+
           <div className="flex gap-[3px]">
-            <div className="flex flex-col gap-[3px] pr-1 text-[9px] text-muted-foreground">
-              {/* Row indices: 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat.
-                  Label only Mon/Wed/Fri, each on its own 11px row so it lines
-                  up with the matching row in the grid below (previously these
-                  3 labels were spread with justify-between over the full
-                  height, which visually mismatched them against the actual
-                  Sun-first rows). */}
-              {["", "L", "", "M", "", "V", ""].map((lbl, i) => (
-                <span key={i} className="h-[11px] leading-[11px]">
+            {/* Days of the Week labels (English: M, W, F aligned) */}
+            <div className="flex flex-col gap-[3px] pr-1 text-[9px] font-mono font-bold text-neutral-600">
+              {["", "M", "", "W", "", "F", ""].map((lbl, i) => (
+                <span key={i} className="h-[11px] leading-[11px] w-3 text-center">
                   {lbl}
                 </span>
               ))}
             </div>
+
+            {/* Grid Generation */}
             <div className="flex gap-[3px]">
               {Array.from({ length: monthLabels.length }, (_, w) => (
                 <div key={w} className="flex flex-col gap-[3px]">
                   {Array.from({ length: 7 }, (_, d) => {
                     const cell = grid[d]?.[w];
                     if (!cell || cell.inFuture)
-                      return <div key={d} className="w-[11px] h-[11px]" />;
+                      return <div key={d} className="w-[11px] h-[11px] bg-transparent" />;
                     return (
                       <div
                         key={d}
-                        title={`${cell.count} fiche${cell.count > 1 ? "s" : ""} le ${cell.date.toLocaleDateString("fr-FR")}`}
-                        className={`w-[11px] h-[11px] rounded-[3px] border ${intensityClass(cell.count)}`}
+                        title={`${cell.count} card${cell.count !== 1 ? "s" : ""} on ${cell.date.toLocaleDateString("en-US")}`}
+                        className={`w-[11px] h-[11px] rounded-[3px] border transition-colors duration-300 ${intensityClass(cell.count)}`}
                       />
                     );
                   })}
@@ -176,6 +183,7 @@ export function ContributionGrid() {
           </div>
         </div>
       </div>
+
     </section>
   );
 }
