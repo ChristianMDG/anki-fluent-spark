@@ -298,7 +298,7 @@ function ShadowingPage() {
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-6">
         {/* Video column */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <div className="glass-panel p-4">
             <div className="flex gap-1 mb-3 p-1 bg-black/30 rounded-lg w-fit">
               <button
