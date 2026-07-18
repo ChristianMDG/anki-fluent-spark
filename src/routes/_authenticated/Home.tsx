@@ -6,7 +6,7 @@ import { DailyGoalCard } from "@/components/DailyGoalCard";
 import { ListenVsProduceCard } from "@/components/ListenVsProduceCard";
 import { ContributionGrid } from "@/components/ContributionGrid";
 
-export const Route = createFileRoute("/_authenticated/home")({
+export const Route = createFileRoute("/_authenticated/Home")({
   component: HomePage,
 });
 

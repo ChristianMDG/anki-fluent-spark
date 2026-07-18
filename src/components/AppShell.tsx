@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { VideoPlayerProvider } from "@/lib/video-player-context";
 
 const NAV = [
-  { to: "/home", label: "Home", icon: Home },
+  { to: "/home", label: "Dashboard", icon: Home },
   { to: "/library", label: "Library", icon: Library },
   { to: "/shadowing", label: "Shadowing", icon: Video },
   { to: "/parcours", label: "Parcours", icon: Compass },
