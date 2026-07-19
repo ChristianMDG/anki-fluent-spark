@@ -85,12 +85,10 @@ function ParcoursPage() {
         <p className="label-mono text-[color:var(--color-gold)] flex items-center gap-2">
           <Compass size={14} /> Path
         </p>
-        <h1 className="text-3xl md:text-4xl font-bold mt-1">
-          Become fluent in every situation.
-        </h1>
+        <h1 className="text-3xl md:text-4xl font-bold mt-1">Become fluent in every situation.</h1>
         <p className="text-muted-foreground mt-2 max-w-2xl">
-          5 situations × 5 levels of linguistic complexity. Each mastered cell
-          unlocks the next one to its right and below.
+          5 situations × 5 levels of linguistic complexity. Each mastered cell unlocks the next one
+          to its right and below.
         </p>
       </div>
 
@@ -117,9 +115,7 @@ function ParcoursPage() {
               <FragmentRow
                 key={sit}
                 situation={sit}
-                cells={LEVELS.map(
-                  (lvl) => byKey.get(`${sit}:${lvl}`) ?? null,
-                )}
+                cells={LEVELS.map((lvl) => byKey.get(`${sit}:${lvl}`) ?? null)}
                 onOpen={openCell}
               />
             ))}
@@ -181,7 +177,8 @@ function MatrixCell({ cell, onClick }: { cell: Cell; onClick: () => void }) {
   let text: React.ReactNode = null;
 
   if (cell.status === "locked") {
-    cls = "bg-black/40 border-[color:var(--color-border)] text-muted-foreground opacity-70 cursor-help";
+    cls =
+      "bg-black/40 border-[color:var(--color-border)] text-muted-foreground opacity-70 cursor-help";
     icon = <Lock size={18} />;
     text = <span className="label-mono">Locked</span>;
   } else if (cell.status === "available") {
@@ -274,18 +271,17 @@ function CellDetail({
                 " and "}
               {JOURNEY_SITUATIONS.indexOf(cell.situation) > 0 && (
                 <>
-                  the same column in <b>
+                  the same column in{" "}
+                  <b>
                     {
                       SITUATION_META[
-                        JOURNEY_SITUATIONS[
-                          JOURNEY_SITUATIONS.indexOf(cell.situation) - 1
-                        ]
+                        JOURNEY_SITUATIONS[JOURNEY_SITUATIONS.indexOf(cell.situation) - 1]
                       ].label
                     }
                   </b>
                 </>
-              )}
-              {" "}to unlock.
+              )}{" "}
+              to unlock.
             </p>
           </div>
         ) : (
@@ -339,9 +335,7 @@ function Stat({
 }) {
   return (
     <div className="glass-panel p-4">
-      <div
-        className={`text-2xl font-bold ${accent ? "text-[color:var(--color-gold)]" : ""}`}
-      >
+      <div className={`text-2xl font-bold ${accent ? "text-[color:var(--color-gold)]" : ""}`}>
         {value}
       </div>
       <div className="label-mono mt-1">{label}</div>
