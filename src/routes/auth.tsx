@@ -65,7 +65,7 @@ function AuthPage() {
         >
           <div className="w-6 h-[1px] bg-[var(--color-crimson)] shadow-[0_0_10px_var(--color-crimson)]" />
           <span className="font-audiowide text-xs uppercase tracking-[0.3em] text-[var(--color-muted-foreground)]">
-            Akatsuki Global Intelligence Network
+           Welcome To I-Speak
           </span>
         </div>
 

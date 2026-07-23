@@ -123,6 +123,7 @@ function GeneratePage() {
   }
 
   const queuedCount = (history.data ?? []).filter((c) => !c.exported).length;
+  const reviewCount = (history.data ?? []).filter((c) => c.needs_review).length;
   const exportedCount = (history.data ?? []).filter((c) => c.exported).length;
 
   const filtered = useMemo(() => {
@@ -171,7 +172,8 @@ function GeneratePage() {
   // While actively searching, skip grouping — a flat list is faster to scan for a specific hit.
   const isSearching = q.trim().length > 0;
   const groups = useMemo(() => {
-    if (isSearching) return null;
+    // Skip grouping when searching or in review mode — flat list is clearer
+    if (isSearching || reviewOnly) return null;
     const byLevel = new Map<string, CardRow[]>();
     for (const c of filtered) {
       const key = c.level && LEVEL_ORDER.includes(c.level) ? c.level : "Other";
@@ -181,7 +183,7 @@ function GeneratePage() {
     return LEVEL_ORDER.map((key) => ({ key, cards: byLevel.get(key) ?? [] })).filter(
       (g) => g.cards.length > 0
     );
-  }, [filtered, isSearching]);
+  }, [filtered, isSearching, reviewOnly]);
 
   function toggleGroup(key: string) {
     setOpenGroups((prev) => {
@@ -198,6 +200,8 @@ function GeneratePage() {
   function toggleAllGroups() {
     setOpenGroups(allOpen ? new Set() : new Set(allGroupKeys));
   }
+
+
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -367,10 +371,17 @@ function GeneratePage() {
                 className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition ${
                   reviewOnly
                     ? "border-amber-500/60 bg-amber-500/15 text-amber-300"
-                    : "border-[color:var(--color-border)] text-muted-foreground hover:text-foreground"
+                    : "border-[color:var(--color-border)] text-muted-foreground hover:text-foreground hover:border-amber-500/30 hover:text-amber-300"
                 }`}
               >
-                <AlertTriangle size={13} /> Needs review only
+                <AlertTriangle size={13} /> Needs review
+                {reviewCount > 0 && (
+                  <span className={`ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                    reviewOnly ? "bg-amber-500/30 text-amber-200" : "bg-amber-500/15 text-amber-400"
+                  }`}>
+                    {reviewCount}
+                  </span>
+                )}
               </button>
 
               <div className="flex gap-1 glass-panel-soft p-1 rounded-lg">
@@ -424,12 +435,23 @@ function GeneratePage() {
             <CardSkeleton compact />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="glass-panel-soft p-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              {(history.data?.length ?? 0) === 0
-                ? "No cards yet — generate your first one above."
-                : "No cards match this filter."}
-            </p>
+          <div className="glass-panel-soft p-10 text-center space-y-2">
+            {reviewOnly ? (
+              <>
+                <p className="text-2xl">✅</p>
+                <p className="text-sm font-medium text-white">All caught up!</p>
+                <p className="text-xs text-muted-foreground">
+                  No cards flagged for review. Use the{" "}
+                  <span className="text-amber-400">🏳 flag</span> on any card to add it here.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {(history.data?.length ?? 0) === 0
+                  ? "No cards yet — generate your first one above."
+                  : "No cards match this filter."}
+              </p>
+            )}
           </div>
         ) : isSearching || !groups ? (
           <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-fr">

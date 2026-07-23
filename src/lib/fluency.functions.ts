@@ -116,3 +116,67 @@ export const generateFluencyPrompt = createServerFn({ method: "POST" })
     const text = await callAI(system, user);
     return { prompt: text.replace(/^["']|["']$/g, "") };
   });
+
+// ---------------------------------------------------------------------------
+// Interactive dialogue: the learner speaks, the browser transcribes it via
+// SpeechRecognition, and this function generates the AI's next spoken turn —
+// a real back-and-forth instead of a single static prompt to react to once.
+// ---------------------------------------------------------------------------
+
+const dialogueTurnSchema = z.object({
+  speaker: z.enum(["ai", "learner"]),
+  text: z.string().max(600),
+});
+
+const REPLY_SYSTEM = `You are one side of a natural, realistic spoken English conversation with a language learner. You already said the opening line; the learner just replied (their reply may contain small grammar mistakes — do not correct them, just respond naturally as a real person would, staying in character and in the situation). Continue the conversation with ONE short, natural spoken reply that keeps the exchange going — ask a related follow-up, react genuinely, or shift the conversation forward. Output ONLY your line, no speaker label, no preamble, no quotes, no French, no stage directions.`;
+
+const HINT_SYSTEM = `You help a language learner who is stuck mid-conversation. Given the conversation so far, suggest ONE short natural sentence starter (4-8 words, ending with "…") they could use to begin their next reply — just the beginning, not the full sentence, so they still have to complete it themselves. Output ONLY the starter phrase, no preamble, no quotes, no French.`;
+
+export const generateDialogueReply = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: {
+      history: { speaker: "ai" | "learner"; text: string }[];
+      situation?: "social" | "transactional" | "professional" | "emotional" | "narrative";
+      complexityLevel?: number;
+      vocabularyWords?: string[];
+    }) =>
+      z
+        .object({
+          history: z.array(dialogueTurnSchema).min(1).max(20),
+          situation: z
+            .enum(["social", "transactional", "professional", "emotional", "narrative"])
+            .optional(),
+          complexityLevel: z.number().int().min(1).max(5).optional(),
+          vocabularyWords: z.array(z.string().max(80)).max(5).optional(),
+        })
+        .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const system = buildContextSystem(REPLY_SYSTEM, {
+      situation: data.situation,
+      complexityLevel: data.complexityLevel,
+      vocabularyWords: data.vocabularyWords,
+    });
+    const transcript = data.history
+      .map((t) => `${t.speaker === "ai" ? "You" : "Learner"}: ${t.text}`)
+      .join("\n");
+    const user = `Conversation so far:\n${transcript}\n\nGive your next spoken line now.`;
+    const text = await callAI(system, user);
+    return { text: text.replace(/^["']|["']$/g, "") };
+  });
+
+export const generateDialogueHint = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: { history: { speaker: "ai" | "learner"; text: string }[] }) =>
+      z.object({ history: z.array(dialogueTurnSchema).min(1).max(20) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const transcript = data.history
+      .map((t) => `${t.speaker === "ai" ? "You" : "Learner"}: ${t.text}`)
+      .join("\n");
+    const user = `Conversation so far:\n${transcript}\n\nSuggest a sentence starter for the learner's next reply.`;
+    const text = await callAI(HINT_SYSTEM, user);
+    return { starter: text.replace(/^["']|["']$/g, "") };
+  });

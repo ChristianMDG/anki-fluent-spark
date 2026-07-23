@@ -101,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <p className="font-audiowide text-[10px] tracking-[0.25em] text-[var(--color-gold)] uppercase">Akatsuki</p>
             </div>
             <p className="font-audiowide text-base font-black tracking-wider mt-0.5 text-white uppercase">
-              Vocab <span className="text-[var(--color-crimson)]">to</span> Anki
+             <span className="text-[var(--color-crimson)]"> I-</span>Speak
             </p>
           </div>
 

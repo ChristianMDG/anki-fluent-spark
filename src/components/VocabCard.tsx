@@ -12,6 +12,7 @@ import {
   BookmarkCheck,
   RotateCcw,
   Eye,
+  Flag,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { grammarToHtml, examplesToHtml, clozeToHtml } from "@/lib/parse-card";
@@ -101,19 +102,20 @@ export function VocabCard({
     else persistTags([...tags, clean]);
   }
 
-  async function markReviewed() {
-    setNeedsReview(false);
+  async function toggleNeedsReview() {
+    const next = !needsReview;
+    setNeedsReview(next);
     const { error } = await supabase
       .from("cards")
-      .update({ needs_review: false })
+      .update({ needs_review: next })
       .eq("id", card.id);
     if (error) {
-      setNeedsReview(true);
+      setNeedsReview(!next);
       return toast.error(error.message);
     }
     qc.invalidateQueries({ queryKey: ["cards"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
-    toast.success("Marked as reviewed");
+    toast.success(next ? "Flagged for review" : "Marked as reviewed");
   }
 
   async function handleConfirmDelete() {
@@ -348,15 +350,17 @@ export function VocabCard({
                     {!exported ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
                   </button>
 
-                  {needsReview && (
-                    <button
-                      onClick={markReviewed}
-                      title="Mark as reviewed"
-                      className="p-1.5 h-8 w-8 rounded-md flex items-center justify-center border border-amber-500/30 text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 transition"
-                    >
-                      <Check size={14} />
-                    </button>
-                  )}
+                  <button
+                    onClick={toggleNeedsReview}
+                    title={needsReview ? "Mark as reviewed" : "Flag for review"}
+                    className={`p-1.5 h-8 w-8 rounded-md flex items-center justify-center border transition ${
+                      needsReview
+                        ? "border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                        : "border-white/5 text-muted-foreground hover:text-amber-400 hover:border-amber-500/30 hover:bg-amber-500/5"
+                    }`}
+                  >
+                    {needsReview ? <Check size={14} /> : <Flag size={14} />}
+                  </button>
 
                   {onDelete && (
                     <button

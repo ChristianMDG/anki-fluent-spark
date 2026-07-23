@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { generateFluencyPrompt } from "@/lib/fluency.functions";
+import { generateFluencyPrompt, generateDialogueReply, generateDialogueHint } from "@/lib/fluency.functions";
 import { currentTheme, SESSION_CONFIG, type SessionLength } from "@/lib/fluency-themes";
 import { SITUATION_META, COMPLEXITY_META, type JourneySituation } from "@/lib/journey";
 import { z } from "zod";
@@ -18,6 +18,10 @@ import {
   ChevronRight,
   ArrowLeft,
   Compass,
+  Lightbulb,
+  Subtitles,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +37,12 @@ interface Exercise {
   type: ExerciseType;
   prompt: string; // text prompt for free_talk/dialogue; joined chunks for chunk_repeat
   chunks?: string[];
+  // Only populated for "dialogue" exercises — carried through so the
+  // interactive conversation can keep generating replies in the right
+  // situation/complexity/vocabulary context, not just for the opening line.
+  situation?: JourneySituation;
+  complexityLevel?: number;
+  vocab?: string[];
 }
 
 interface RecordingState {
@@ -45,7 +55,7 @@ interface RecordingState {
   pinned: boolean;
 }
 
-type SessionMode = "mixed" | "free_talk" | "chunk_repeat";
+type SessionMode = "mixed" | "free_talk" | "chunk_repeat" | "dialogue";
 
 function FluencyPage() {
   const search = Route.useSearch();
@@ -104,11 +114,15 @@ function FluencyPage() {
   }
 
   async function buildExercises(count: number): Promise<Exercise[]> {
-    // In "mixed" mode, cycle through all 3 exercise types like before. In a
-    // focused mode ("free_talk" or "chunk_repeat"), every exercise in the
-    // session is that single type instead of rotating.
-    const order: ExerciseType[] =
-      sessionMode === "mixed" ? ["free_talk", "chunk_repeat", "dialogue"] : [sessionMode];
+    // Map session mode to the exercise type(s) to cycle through.
+    // "mixed" rotates all three; focused modes repeat their single type.
+    const modeToOrder: Record<SessionMode, ExerciseType[]> = {
+      mixed: ["free_talk", "chunk_repeat", "dialogue"],
+      free_talk: ["free_talk"],
+      chunk_repeat: ["chunk_repeat"],
+      dialogue: ["dialogue"],
+    };
+    const order: ExerciseType[] = modeToOrder[sessionMode];
     const chunks = await loadChunksPool();
     const situation = (cell?.situation ?? null) as JourneySituation | null;
     const complexityLevel = cell?.complexity_level ?? undefined;
@@ -132,7 +146,17 @@ function FluencyPage() {
               ...(vocab.length ? { vocabularyWords: vocab } : {}),
             },
           });
-          out.push({ type, prompt });
+          out.push({
+            type,
+            prompt,
+            ...(type === "dialogue"
+              ? {
+                  situation: situation ?? undefined,
+                  complexityLevel,
+                  vocab,
+                }
+              : {}),
+          });
         } catch (e) {
           out.push({
             type,
@@ -402,7 +426,7 @@ function FluencyEntry({
 
       <div>
         <p className="label-mono mb-3">Session Type</p>
-        <div className="grid md:grid-cols-3 gap-3">
+        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
           {(
             [
               {
@@ -419,6 +443,11 @@ function FluencyEntry({
                 key: "chunk_repeat" as const,
                 label: "Chunk Repeat only",
                 desc: "Every exercise is a set of expressions to repeat aloud.",
+              },
+              {
+                key: "dialogue" as const,
+                label: "Dialogue only",
+                desc: "Real back-and-forth AI conversation — speak and get a natural reply.",
               },
             ] as const
           ).map((m) => {
@@ -546,10 +575,13 @@ function SessionRunner({
     setRecording(false);
   }
 
+  const [dialogueRetryKey, setDialogueRetryKey] = useState(0);
+
   function retryRecording() {
     if (result) URL.revokeObjectURL(result.url);
     setResult(null);
     setElapsed(0);
+    setDialogueRetryKey((k) => k + 1);
   }
 
   function handleBack() {
@@ -661,69 +693,94 @@ function SessionRunner({
         <p className="label-mono text-[color:var(--color-gold)]">{labelType(exercise.type)}</p>
       </div>
 
-      <div className="glass-panel p-6 md:p-8">
-        {exercise.type === "chunk_repeat" && exercise.chunks ? (
-          <div className="space-y-3">
-            <p className="label-mono">Repeat these expressions out loud</p>
-            <ul className="space-y-2">
-              {exercise.chunks.map((c, i) => (
-                <li
-                  key={i}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2"
-                >
-                  <span className="text-lg">{c}</span>
-                  <button
-                    onClick={() => speakChunk(c)}
-                    className="text-muted-foreground hover:text-[color:var(--color-gold)] transition"
-                    title="Listen"
-                  >
-                    <Volume2 size={18} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <>
-            <p className="label-mono">Prompt</p>
-            <p className="text-xl md:text-2xl font-medium mt-2 leading-relaxed">
-              {exercise.prompt}
-            </p>
-          </>
-        )}
-      </div>
-
-      {!result ? (
-        <div className="glass-panel p-8 flex flex-col items-center gap-5">
-          <button
-            onClick={recording ? stopRecording : startRecording}
-            className={`relative h-28 w-28 rounded-full flex items-center justify-center transition ${
-              recording
-                ? "bg-[color:var(--color-crimson)] text-white"
-                : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white"
-            }`}
-            aria-label={recording ? "Stop recording" : "Start recording"}
-          >
-            {recording && (
-              <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
-            )}
-            <span className="relative z-10">
-              {recording ? <Square size={36} /> : <Mic size={36} />}
-            </span>
-          </button>
-          <div className="text-center">
-            <div className="text-2xl font-mono font-bold">
-              {formatTime(elapsed)}
-              {exercise.type === "free_talk" && (
-                <span className="text-muted-foreground text-base"> / {formatTime(maxSeconds)}</span>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              {recording ? "Recording in progress…" : "Press to start"}
-            </p>
-          </div>
-        </div>
+      {exercise.type === "dialogue" ? (
+        // Real back-and-forth conversation: the browser transcribes what the
+        // learner says (SpeechRecognition), the AI replies naturally
+        // (generateDialogueReply) and speaks it (SpeechSynthesis) — instead
+        // of reacting once to a single static line. Internally records
+        // continuous audio for the journal/rating flow below, exactly like
+        // the other exercise types once it hands back a result.
+        <InteractiveDialogue
+          key={`${exercise.prompt}:${dialogueRetryKey}`}
+          openingLine={exercise.prompt}
+          situation={exercise.situation}
+          complexityLevel={exercise.complexityLevel}
+          vocab={exercise.vocab}
+          result={result}
+          onFinish={(r: RecordingState) => setResult(r)}
+        />
       ) : (
+        <>
+          <div className="glass-panel p-6 md:p-8">
+            {exercise.type === "chunk_repeat" && exercise.chunks ? (
+              <div className="space-y-3">
+                <p className="label-mono">Repeat these expressions out loud</p>
+                <ul className="space-y-2">
+                  {exercise.chunks.map((c, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2"
+                    >
+                      <span className="text-lg">{c}</span>
+                      <button
+                        onClick={() => speakChunk(c)}
+                        className="text-muted-foreground hover:text-[color:var(--color-gold)] transition"
+                        title="Listen"
+                      >
+                        <Volume2 size={18} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <>
+                <p className="label-mono">Prompt</p>
+                <p className="text-xl md:text-2xl font-medium mt-2 leading-relaxed">
+                  {exercise.prompt}
+                </p>
+              </>
+            )}
+          </div>
+
+          {!result ? (
+            <div className="glass-panel p-8 flex flex-col items-center gap-5">
+              <button
+                onClick={recording ? stopRecording : startRecording}
+                className={`relative h-28 w-28 rounded-full flex items-center justify-center transition ${
+                  recording
+                    ? "bg-[color:var(--color-crimson)] text-white"
+                    : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white"
+                }`}
+                aria-label={recording ? "Stop recording" : "Start recording"}
+              >
+                {recording && (
+                  <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
+                )}
+                <span className="relative z-10">
+                  {recording ? <Square size={36} /> : <Mic size={36} />}
+                </span>
+              </button>
+              <div className="text-center">
+                <div className="text-2xl font-mono font-bold">
+                  {formatTime(elapsed)}
+                  {exercise.type === "free_talk" && (
+                    <span className="text-muted-foreground text-base">
+                      {" "}
+                      / {formatTime(maxSeconds)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {recording ? "Recording in progress…" : "Press to start"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+
+      {result ? (
         <div className="space-y-4">
           <div className="glass-panel p-5 space-y-3">
             <p className="label-mono">Your take ({formatTime(result.durationSec)})</p>
@@ -782,10 +839,397 @@ function SessionRunner({
             </div>
           </div>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InteractiveDialogue — a real spoken back-and-forth instead of a single
+// static prompt. The browser transcribes the learner's speech, the AI
+// generates a natural follow-up line and speaks it, and the whole exchange
+// is recorded as one continuous take for the journal/rating flow shared
+// with the other exercise types (via `onFinish`).
+// ---------------------------------------------------------------------------
+
+interface DialogueTurn {
+  speaker: "ai" | "learner";
+  text: string;
+}
+
+// Minimal shape of the non-standard Web Speech API (webkit-prefixed in most
+// browsers, absent in Safari/Firefox at the time of writing) — kept narrow
+// and local instead of `any` so the fallback path stays type-safe.
+interface SpeechRecognitionLike extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function InteractiveDialogue({
+  openingLine,
+  situation,
+  complexityLevel,
+  vocab,
+  result,
+  onFinish,
+}: {
+  openingLine: string;
+  situation?: JourneySituation;
+  complexityLevel?: number;
+  vocab?: string[];
+  result: RecordingState | null;
+  onFinish: (r: RecordingState) => void;
+}) {
+  const [turns, setTurns] = useState<DialogueTurn[]>([{ speaker: "ai", text: openingLine }]);
+  const [listening, setListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [hintLoading, setHintLoading] = useState(false);
+  const [captionsOn, setCaptionsOn] = useState(true);
+  const [typedReply, setTypedReply] = useState("");
+  const [finishing, setFinishing] = useState(false);
+
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const startTsRef = useRef<number>(0);
+  const finishedRef = useRef(false);
+
+  const getReply = useServerFn(generateDialogueReply);
+  const getHint = useServerFn(generateDialogueHint);
+
+  const supportsSpeech = useMemo(() => getSpeechRecognitionCtor() !== null, []);
+  const learnerTurnCount = turns.filter((t) => t.speaker === "learner").length;
+  const canFinish = learnerTurnCount >= 2 && !finishing && !result;
+
+  // Speak each new AI line as it arrives.
+  useEffect(() => {
+    const last = turns[turns.length - 1];
+    if (last?.speaker === "ai" && typeof window !== "undefined" && window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance(last.text);
+      u.lang = "en-US";
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turns]);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  async function ensureRecorderStarted() {
+    if (recorderRef.current) return;
+    if (typeof MediaRecorder === "undefined") return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    streamRef.current = stream;
+    const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    chunksRef.current = [];
+    rec.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
+    rec.start();
+    recorderRef.current = rec;
+    startTsRef.current = Date.now();
+  }
+
+  async function sendLearnerTurn(text: string) {
+    const clean = text.trim();
+    if (!clean) return;
+    const nextTurns: DialogueTurn[] = [...turns, { speaker: "learner", text: clean }];
+    setTurns(nextTurns);
+    setHint(null);
+    setTypedReply("");
+    setThinking(true);
+    try {
+      const { text: reply } = await getReply({
+        data: { history: nextTurns, situation, complexityLevel, vocabularyWords: vocab },
+      });
+      setTurns((prev) => [...prev, { speaker: "ai", text: reply }]);
+    } catch {
+      toast.error("Couldn't get a reply — try again.");
+    } finally {
+      setThinking(false);
+    }
+  }
+
+  async function startListening() {
+    try {
+      await ensureRecorderStarted();
+    } catch {
+      toast.error("Mic access denied. Allow microphone access in your browser settings.");
+      return;
+    }
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) return; // handled by the typed-reply fallback UI instead
+    const rec = new Ctor();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.onresult = (ev) => {
+      let finalText = "";
+      let interim = "";
+      for (let i = 0; i < ev.results.length; i++) {
+        const r = ev.results[i][0];
+        // Heuristic: the Web Speech API marks finality on the result item,
+        // not exposed in this narrow type — treat the last chunk as final
+        // once recognition ends instead of relying on `.isFinal` typing.
+        interim += r.transcript;
+      }
+      finalText = interim;
+      setInterimText(finalText);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+      setInterimText((current) => {
+        if (current.trim()) sendLearnerTurn(current);
+        return "";
+      });
+    };
+    recognitionRef.current = rec;
+    setListening(true);
+    setInterimText("");
+    rec.start();
+  }
+
+  function stopListening() {
+    recognitionRef.current?.stop();
+  }
+
+  async function requestHint() {
+    setHintLoading(true);
+    try {
+      const { starter } = await getHint({ data: { history: turns } });
+      setHint(starter);
+    } catch {
+      toast.error("Couldn't fetch a hint right now.");
+    } finally {
+      setHintLoading(false);
+    }
+  }
+
+  async function finishConversation() {
+    setFinishing(true);
+    window.speechSynthesis?.cancel();
+    recognitionRef.current?.stop();
+    const rec = recorderRef.current;
+    if (!rec || rec.state === "inactive") {
+      // Nothing was ever recorded (e.g. mic never granted) — still let the
+      // learner move on with an empty placeholder rather than getting stuck.
+      finishedRef.current = true;
+      onFinish({
+        blob: new Blob([], { type: "audio/webm" }),
+        url: "",
+        durationSec: 0,
+        ratings: { fluency: 3, confidence: 3, hesitation: 3 },
+        pinned: false,
+      });
+      return;
+    }
+    rec.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+      const url = URL.createObjectURL(blob);
+      const durationSec = Math.round((Date.now() - startTsRef.current) / 1000);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      finishedRef.current = true;
+      onFinish({
+        blob,
+        url,
+        durationSec,
+        ratings: { fluency: 3, confidence: 3, hesitation: 3 },
+        pinned: false,
+      });
+    };
+    rec.stop();
+  }
+
+  const lastAiLine = [...turns].reverse().find((t) => t.speaker === "ai")?.text ?? "";
+
+  return (
+    <div className="space-y-4">
+      {vocab && vocab.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <span className="label-mono text-muted-foreground self-center">Try to use:</span>
+          {vocab.map((w) => (
+            <button
+              key={w}
+              onClick={() => {
+                const u = new SpeechSynthesisUtterance(w);
+                u.lang = "en-US";
+                window.speechSynthesis?.speak(u);
+              }}
+              className="text-xs px-2.5 py-1 rounded-full border border-[color:var(--color-crimson-glow)]/40 bg-[color:var(--color-crimson)]/10 text-[color:var(--color-gold)] hover:bg-[color:var(--color-crimson)]/20 transition flex items-center gap-1"
+            >
+              <Volume2 size={11} /> {w}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="glass-panel p-6 md:p-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="label-mono">Conversation</p>
+          <button
+            onClick={() => setCaptionsOn((v) => !v)}
+            className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
+            title={captionsOn ? "Hide captions" : "Show captions"}
+          >
+            <Subtitles size={14} /> {captionsOn ? "Captions on" : "Captions off"}
+          </button>
+        </div>
+
+        <div className="space-y-2.5 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+          {turns.map((t, i) => (
+            <div
+              key={i}
+              className={`flex ${t.speaker === "ai" ? "justify-start" : "justify-end"}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
+                  t.speaker === "ai"
+                    ? "bg-white/5 border border-[color:var(--color-border)] rounded-tl-sm"
+                    : "bg-[color:var(--color-crimson)]/25 border border-[color:var(--color-crimson-glow)]/30 rounded-tr-sm"
+                } ${captionsOn ? "" : "blur-sm select-none"}`}
+              >
+                {t.text}
+              </div>
+            </div>
+          ))}
+          {thinking && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-white/5 border border-[color:var(--color-border)]">
+                <Loader2 size={14} className="animate-spin text-muted-foreground" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={() => {
+            const u = new SpeechSynthesisUtterance(lastAiLine);
+            u.lang = "en-US";
+            window.speechSynthesis?.cancel();
+            window.speechSynthesis?.speak(u);
+          }}
+          className="text-xs text-muted-foreground hover:text-[color:var(--color-gold)] transition flex items-center gap-1.5"
+        >
+          <Volume2 size={13} /> Replay last line
+        </button>
+      </div>
+
+      {!result && (
+        <div className="glass-panel p-6 flex flex-col items-center gap-4">
+          {supportsSpeech ? (
+            <>
+              <button
+                onClick={listening ? stopListening : startListening}
+                disabled={thinking}
+                className={`relative h-20 w-20 rounded-full flex items-center justify-center transition disabled:opacity-40 ${
+                  listening
+                    ? "bg-[color:var(--color-crimson)] text-white"
+                    : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white"
+                }`}
+                aria-label={listening ? "Stop and send" : "Speak your reply"}
+              >
+                {listening && (
+                  <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
+                )}
+                <span className="relative z-10">
+                  {listening ? <Square size={26} /> : <Mic size={26} />}
+                </span>
+              </button>
+              <p className="text-sm text-muted-foreground text-center min-h-[20px]">
+                {listening
+                  ? interimText || "Listening…"
+                  : "Press and speak your reply, then press again to send"}
+              </p>
+            </>
+          ) : (
+            <div className="w-full space-y-2">
+              <p className="text-xs text-muted-foreground text-center">
+                Your browser doesn't support voice recognition — speak your reply out loud, then
+                type it below to continue.
+              </p>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  ensureRecorderStarted().finally(() => sendLearnerTurn(typedReply));
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  value={typedReply}
+                  onChange={(e) => setTypedReply(e.target.value)}
+                  placeholder="Type what you said…"
+                  className="flex-1 glass-panel-soft px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[color:var(--color-crimson-glow)]"
+                />
+                <button
+                  type="submit"
+                  disabled={!typedReply.trim() || thinking}
+                  className="btn-crimson rounded-lg px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={requestHint}
+              disabled={hintLoading}
+              className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-border)] hover:bg-white/5 flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition disabled:opacity-50"
+            >
+              {hintLoading ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Lightbulb size={13} />
+              )}
+              Need a hint?
+            </button>
+            {canFinish && (
+              <button
+                onClick={finishConversation}
+                disabled={finishing}
+                className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-gold)]/40 text-[color:var(--color-gold)] hover:bg-[color:var(--color-gold)]/10 flex items-center gap-1.5 transition"
+              >
+                <CheckCircle2 size={13} /> Finish conversation
+              </button>
+            )}
+          </div>
+
+          {hint && (
+            <p className="text-xs text-[color:var(--color-gold)] italic text-center">"{hint}"</p>
+          )}
+        </div>
       )}
     </div>
   );
 }
+
 
 function RatingSlider({
   label,
