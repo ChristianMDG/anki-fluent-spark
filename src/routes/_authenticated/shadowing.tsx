@@ -347,6 +347,30 @@ function ShadowingPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Swap-stream bar — load a different video while one is active */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    loadYoutube();
+                  }}
+                  className="flex gap-2 border-t border-white/5 pt-3"
+                >
+                  <Youtube size={13} className="shrink-0 self-center text-[var(--color-crimson)] opacity-70" />
+                  <input
+                    value={ytUrl}
+                    onChange={(e) => setYtUrl(e.target.value)}
+                    placeholder="Swap stream — paste new YouTube URL…"
+                    className="flex-1 min-w-0 bg-neutral-950 border border-white/5 px-3 py-1.5 text-xs text-white placeholder-neutral-600 rounded-lg focus:outline-none focus:border-[var(--color-crimson)]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!ytUrl.trim()}
+                    className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] disabled:opacity-40 px-3 py-1.5 text-xs rounded-lg transition shrink-0 flex items-center gap-1"
+                  >
+                    <Play size={11} className="fill-current text-[var(--color-crimson)]" /> Load
+                  </button>
+                </form>
               </div>
             ) : (
               /* Core Empty Injector Hub */
