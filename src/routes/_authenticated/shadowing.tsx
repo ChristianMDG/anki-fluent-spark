@@ -746,9 +746,25 @@ function NoteItem({
       .eq("id", note.id);
     setSaving(false);
     if (error) return toast.error(error.message);
+    if (note.card_id && w !== note.word) {
+      toast.warning("Note updated, but its flashcard still uses the old word", {
+        description: `The card generated from "${note.word}" was not regenerated.`,
+      });
+    }
     setEditing(false);
     qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
   }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void saveEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setEditing(false);
+    }
+  }
+
 
   async function handleConfirmDelete() {
     const ok = await confirmDialog({
