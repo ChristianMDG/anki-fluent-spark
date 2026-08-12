@@ -15,8 +15,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedShadowingRouteImport } from './routes/_authenticated/shadowing'
 import { Route as AuthenticatedParcoursRouteImport } from './routes/_authenticated/parcours'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
+import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
-import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/Home'
 import { Route as AuthenticatedFluencyIndexRouteImport } from './routes/_authenticated/fluency.index'
 import { Route as AuthenticatedFluencyJournalRouteImport } from './routes/_authenticated/fluency.journal'
 
@@ -49,14 +49,14 @@ const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
   path: '/library',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
   id: '/history',
   path: '/history',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
-  id: '/Home',
-  path: '/Home',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedFluencyIndexRoute =
@@ -75,8 +75,8 @@ const AuthenticatedFluencyJournalRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/Home': typeof AuthenticatedHomeRoute
   '/history': typeof AuthenticatedHistoryRoute
+  '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
   '/parcours': typeof AuthenticatedParcoursRoute
   '/shadowing': typeof AuthenticatedShadowingRoute
@@ -86,8 +86,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/Home': typeof AuthenticatedHomeRoute
   '/history': typeof AuthenticatedHistoryRoute
+  '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
   '/parcours': typeof AuthenticatedParcoursRoute
   '/shadowing': typeof AuthenticatedShadowingRoute
@@ -99,8 +99,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
-  '/_authenticated/Home': typeof AuthenticatedHomeRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
+  '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
   '/_authenticated/parcours': typeof AuthenticatedParcoursRoute
   '/_authenticated/shadowing': typeof AuthenticatedShadowingRoute
@@ -112,8 +112,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
-    | '/Home'
     | '/history'
+    | '/home'
     | '/library'
     | '/parcours'
     | '/shadowing'
@@ -123,8 +123,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/Home'
     | '/history'
+    | '/home'
     | '/library'
     | '/parcours'
     | '/shadowing'
@@ -135,8 +135,8 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
-    | '/_authenticated/Home'
     | '/_authenticated/history'
+    | '/_authenticated/home'
     | '/_authenticated/library'
     | '/_authenticated/parcours'
     | '/_authenticated/shadowing'
@@ -194,18 +194,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLibraryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/home': {
+      id: '/_authenticated/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof AuthenticatedHomeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/history': {
       id: '/_authenticated/history'
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof AuthenticatedHistoryRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/Home': {
-      id: '/_authenticated/Home'
-      path: '/Home'
-      fullPath: '/Home'
-      preLoaderRoute: typeof AuthenticatedHomeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/fluency/': {
@@ -226,8 +226,8 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
+  AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
   AuthenticatedParcoursRoute: typeof AuthenticatedParcoursRoute
   AuthenticatedShadowingRoute: typeof AuthenticatedShadowingRoute
@@ -236,8 +236,8 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
+  AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
   AuthenticatedParcoursRoute: AuthenticatedParcoursRoute,
   AuthenticatedShadowingRoute: AuthenticatedShadowingRoute,

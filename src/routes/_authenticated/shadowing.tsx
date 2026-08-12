@@ -628,7 +628,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
         </div>
         {(notes.data?.length ?? 0) > 0 && (
           <span className="text-[9px] bg-neutral-950 px-2 py-0.5 rounded border border-white/5 text-neutral-400">
-            {notes.data.length - pendingCount}/{notes.data.length} Done
+            {(notes.data?.length ?? 0) - pendingCount}/{notes.data?.length ?? 0} Done
           </span>
         )}
       </div>
