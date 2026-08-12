@@ -628,7 +628,7 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
         </div>
         {(notes.data?.length ?? 0) > 0 && (
           <span className="text-[9px] bg-neutral-950 px-2 py-0.5 rounded border border-white/5 text-neutral-400">
-            {notes.data.length - pendingCount}/{notes.data.length} Done
+            {(notes.data?.length ?? 0) - pendingCount}/{notes.data?.length ?? 0} Done
           </span>
         )}
       </div>
@@ -746,9 +746,25 @@ function NoteItem({
       .eq("id", note.id);
     setSaving(false);
     if (error) return toast.error(error.message);
+    if (note.card_id && w !== note.word) {
+      toast.warning("Note updated, but its flashcard still uses the old word", {
+        description: `The card generated from "${note.word}" was not regenerated.`,
+      });
+    }
     setEditing(false);
     qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
   }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void saveEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setEditing(false);
+    }
+  }
+
 
   async function handleConfirmDelete() {
     const ok = await confirmDialog({

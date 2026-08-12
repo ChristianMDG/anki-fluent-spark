@@ -212,7 +212,10 @@ function FluencyPage() {
         .eq("id", sessionId);
     }
     if (cell) {
-      await supabase.rpc("increment_journey_cell_session", { _cell_id: cell.id });
+      await supabase
+        .from("journey_cells")
+        .update({ sessions_completed: (cell.sessions_completed ?? 0) + 1 })
+        .eq("id", cell.id);
       qc.invalidateQueries({ queryKey: ["journey-cells"] });
       qc.invalidateQueries({ queryKey: ["journey-cell", cell.id] });
     }
