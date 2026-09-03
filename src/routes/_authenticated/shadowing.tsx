@@ -210,6 +210,27 @@ function ShadowingPage() {
     qc.invalidateQueries({ queryKey: ["stats"] });
   }
 
+  async function loadFacebook() {
+    const url = fbUrl.trim();
+    if (!isFacebookVideoUrl(url)) return toast.error("Invalid Facebook video URL");
+    const { data, error } = await supabase
+      .from("shadowing_videos")
+      .insert({
+        source_type: "facebook",
+        source_url: url,
+        title: `Facebook video — ${url.length > 48 ? `${url.slice(0, 48)}…` : url}`,
+        thumbnail_url: "",
+        user_id: (await supabase.auth.getUser()).data.user!.id,
+      })
+      .select()
+      .single();
+    if (error) return toast.error(error.message);
+    player.setVideo(data as VideoRow, null);
+    setFbUrl("");
+    qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+  }
+
   async function handleUpload(file: File) {
     if (file.size > 200 * 1024 * 1024) return toast.error("File too large (200 MB max)");
     setUploading(true);
