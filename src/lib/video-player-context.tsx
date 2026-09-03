@@ -12,6 +12,17 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { Play, Pause, X, Maximize2 } from "lucide-react";
 
+export type VideoSourceType = "youtube" | "upload" | "facebook";
+
+/** Facebook's public Video Plugin iframe exposes no playback/seek API. */
+export function supportsTransportControls(v: PersistentVideo | null): boolean {
+  return !!v && v.source_type !== "facebook";
+}
+
+export function facebookEmbedSrc(url: string): string {
+  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=560`;
+}
+
 export interface PersistentVideo {
   id: string;
   source_type: VideoSourceType;
