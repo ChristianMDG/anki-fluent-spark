@@ -549,8 +549,13 @@ function ShadowingPage() {
                             className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
                           />
                         ) : (
-                          <div className="flex items-center justify-center h-full text-[9px] text-neutral-500 uppercase">
-                            {v.source_type === "upload" ? "📁 Local File" : "▶ Stream"}
+                          <div className="flex flex-col items-center justify-center gap-1 h-full text-[9px] text-neutral-500 uppercase bg-gradient-to-br from-neutral-900 to-black">
+                            <Video size={14} className="opacity-60 text-[var(--color-crimson)]" />
+                            {v.source_type === "upload"
+                              ? "Local File"
+                              : v.source_type === "facebook"
+                                ? "Facebook"
+                                : "Stream"}
                           </div>
                         )}
                         {isActive && (
