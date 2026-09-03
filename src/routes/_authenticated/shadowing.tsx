@@ -24,6 +24,7 @@ import {
   Tv,
   NotebookTabs,
   Layers,
+  Video,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
