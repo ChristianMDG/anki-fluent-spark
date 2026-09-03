@@ -337,6 +337,16 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
                 allowFullScreen
                 title={video.title}
               />
+            ) : video.source_type === "facebook" && video.source_url ? (
+              <iframe
+                src={facebookEmbedSrc(video.source_url)}
+                className="w-full h-full block"
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                allowFullScreen
+                scrolling="no"
+                frameBorder="0"
+                title={video.title}
+              />
             ) : uploadedUrl ? (
               <video
                 ref={videoRef}
