@@ -27,7 +27,17 @@ import {
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
-import { useVideoPlayer, useVideoSlot, type PersistentVideo } from "@/lib/video-player-context";
+import {
+  useVideoPlayer,
+  useVideoSlot,
+  supportsTransportControls,
+  type PersistentVideo,
+  type VideoSourceType,
+} from "@/lib/video-player-context";
+
+function isFacebookVideoUrl(url: string): boolean {
+  return /^(https?:\/\/)?([\w-]+\.)*(facebook\.com|fb\.watch)\/\S+$/i.test(url.trim());
+}
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
