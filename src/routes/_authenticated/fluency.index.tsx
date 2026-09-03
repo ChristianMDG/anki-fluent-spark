@@ -23,6 +23,7 @@ import {
   type LearnerWeakPoint,
 } from "@/integrations/supabase/learner-profile.types";
 import { WeakPointsPanel } from "@/components/fluency/WeakPointsPanel";
+import { PitchContourChart } from "@/components/fluency/PitchContourChart";
 import { getSpeechRecognitionCtor, type SpeechRecognitionLike } from "@/lib/speech";
 import { z } from "zod";
 import {
@@ -1174,7 +1175,10 @@ function SessionRunner({
           <div className="glass-panel p-5 space-y-3">
             <p className="label-mono">Your take ({formatTime(result.durationSec)})</p>
             {result.url ? (
-              <audio src={result.url} controls className="w-full" />
+              <>
+                <audio src={result.url} controls className="w-full" />
+                <PitchContourChart blob={result.blob} />
+              </>
             ) : (
               <p className="text-xs text-muted-foreground italic">Text-based dialogue completed without audio stream.</p>
             )}
