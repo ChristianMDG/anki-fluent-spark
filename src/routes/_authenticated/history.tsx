@@ -107,7 +107,11 @@ function HistoryPage() {
                   <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                    {v.source_type === "upload" ? "📁 Upload" : "▶ YouTube"}
+                    {v.source_type === "upload"
+                      ? "📁 Upload"
+                      : v.source_type === "facebook"
+                        ? "▶ Facebook"
+                        : "▶ YouTube"}
                   </div>
                 )}
               </div>

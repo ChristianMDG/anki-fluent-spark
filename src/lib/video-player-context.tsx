@@ -12,11 +12,23 @@ import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { Play, Pause, X, Maximize2 } from "lucide-react";
 
+export type VideoSourceType = "youtube" | "upload" | "facebook";
+
+/** Facebook's public Video Plugin iframe exposes no playback/seek API. */
+export function supportsTransportControls(v: PersistentVideo | null): boolean {
+  return !!v && v.source_type !== "facebook";
+}
+
+export function facebookEmbedSrc(url: string): string {
+  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=560`;
+}
+
 export interface PersistentVideo {
   id: string;
-  source_type: "youtube" | "upload";
+  source_type: VideoSourceType;
   youtube_id: string | null;
   storage_path: string | null;
+  source_url?: string | null;
   title: string;
   thumbnail_url: string;
   created_at: string;
@@ -165,6 +177,22 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, [video?.id, uploadedUrl]);
 
+  // Facebook: plugin exposes no play-state API — approximate with tab visibility
+  useEffect(() => {
+    if (!video || video.source_type !== "facebook") return;
+    const sync = () => {
+      const visible = document.visibilityState === "visible";
+      playingRef.current = visible;
+      setIsPlaying(visible);
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      playingRef.current = false;
+    };
+  }, [video?.id, video?.source_type]);
+
   // Tick tracker
   useEffect(() => {
     if (!video) return;
@@ -309,6 +337,16 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
                 allowFullScreen
                 title={video.title}
               />
+            ) : video.source_type === "facebook" && video.source_url ? (
+              <iframe
+                src={facebookEmbedSrc(video.source_url)}
+                className="w-full h-full block"
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                allowFullScreen
+                scrolling="no"
+                frameBorder="0"
+                title={video.title}
+              />
             ) : uploadedUrl ? (
               <video
                 ref={videoRef}
@@ -324,14 +362,16 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
           </div>
           {!slotEl && (
             <div className="glass-panel-soft border-t border-[color:var(--color-crimson-glow)]/50 backdrop-blur-lg bg-black/70 flex items-center gap-1 px-2 h-10">
-              <button
-                onClick={playPause}
-                className="p-1.5 rounded hover:bg-white/10 text-[color:var(--color-gold)]"
-                aria-label={isPlaying ? "Pause" : "Play"}
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? <Pause size={14} /> : <Play size={14} />}
-              </button>
+              {supportsTransportControls(video) && (
+                <button
+                  onClick={playPause}
+                  className="p-1.5 rounded hover:bg-white/10 text-[color:var(--color-gold)]"
+                  aria-label={isPlaying ? "Pause" : "Play"}
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+              )}
               <div className="flex-1 min-w-0 text-[11px] truncate px-1">{video.title}</div>
               <button
                 onClick={() => navigate({ to: "/shadowing" })}

@@ -24,10 +24,21 @@ import {
   Tv,
   NotebookTabs,
   Layers,
+  Video,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
-import { useVideoPlayer, useVideoSlot, type PersistentVideo } from "@/lib/video-player-context";
+import {
+  useVideoPlayer,
+  useVideoSlot,
+  supportsTransportControls,
+  type PersistentVideo,
+  type VideoSourceType,
+} from "@/lib/video-player-context";
+
+function isFacebookVideoUrl(url: string): boolean {
+  return /^(https?:\/\/)?([\w-]+\.)*(facebook\.com|fb\.watch)\/\S+$/i.test(url.trim());
+}
 
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
@@ -61,8 +72,9 @@ function ShadowingPage() {
   const player = useVideoPlayer();
   const slotRef = useVideoSlot();
 
-  const [mode, setMode] = useState<"youtube" | "upload">("youtube");
+  const [mode, setMode] = useState<VideoSourceType>("youtube");
   const [ytUrl, setYtUrl] = useState("");
+  const [fbUrl, setFbUrl] = useState("");
   const [uploading, setUploading] = useState(false);
 
   const currentVideo = player.video;
@@ -199,6 +211,27 @@ function ShadowingPage() {
     qc.invalidateQueries({ queryKey: ["stats"] });
   }
 
+  async function loadFacebook() {
+    const url = fbUrl.trim();
+    if (!isFacebookVideoUrl(url)) return toast.error("Invalid Facebook video URL");
+    const { data, error } = await supabase
+      .from("shadowing_videos")
+      .insert({
+        source_type: "facebook",
+        source_url: url,
+        title: `Facebook video — ${url.length > 48 ? `${url.slice(0, 48)}…` : url}`,
+        thumbnail_url: "",
+        user_id: (await supabase.auth.getUser()).data.user!.id,
+      })
+      .select()
+      .single();
+    if (error) return toast.error(error.message);
+    player.setVideo(data as VideoRow, null);
+    setFbUrl("");
+    qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
+    qc.invalidateQueries({ queryKey: ["stats"] });
+  }
+
   async function handleUpload(file: File) {
     if (file.size > 200 * 1024 * 1024) return toast.error("File too large (200 MB max)");
     setUploading(true);
@@ -312,26 +345,32 @@ function ShadowingPage() {
 
                 {/* Command Deck Controls & Telemetry */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/5 pt-3">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => player.seek(-5)}
-                      className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
-                    >
-                      <Rewind size={12} /> -5s
-                    </button>
-                    <button
-                      onClick={player.playPause}
-                      className="bg-[var(--color-crimson)] px-4 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1 shadow-[0_0_10px_rgba(220,38,38,0.2)] hover:opacity-90"
-                    >
-                      <Play size={11} className="fill-current" /> / <Pause size={11} />
-                    </button>
-                    <button
-                      onClick={() => player.seek(5)}
-                      className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
-                    >
-                      +5s <FastForward size={12} />
-                    </button>
-                  </div>
+                  {supportsTransportControls(currentVideo) ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => player.seek(-5)}
+                        className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
+                      >
+                        <Rewind size={12} /> -5s
+                      </button>
+                      <button
+                        onClick={player.playPause}
+                        className="bg-[var(--color-crimson)] px-4 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1 shadow-[0_0_10px_rgba(220,38,38,0.2)] hover:opacity-90"
+                      >
+                        <Play size={11} className="fill-current" /> / <Pause size={11} />
+                      </button>
+                      <button
+                        onClick={() => player.seek(5)}
+                        className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
+                      >
+                        +5s <FastForward size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] uppercase tracking-wider text-neutral-500">
+                      Use the Facebook player's own controls
+                    </p>
+                  )}
 
                   <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                     <span className="text-[11px] text-[var(--color-gold)] font-audiowide bg-neutral-950/80 px-2.5 py-1.5 border border-white/5 rounded-md">
@@ -403,6 +442,12 @@ function ShadowingPage() {
                       YouTube
                     </button>
                     <button
+                      onClick={() => setMode("facebook")}
+                      className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider rounded transition ${mode === "facebook" ? "bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 text-white" : "text-neutral-500"}`}
+                    >
+                      Facebook
+                    </button>
+                    <button
                       onClick={() => setMode("upload")}
                       className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider rounded transition ${mode === "upload" ? "bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 text-white" : "text-neutral-500"}`}
                     >
@@ -410,7 +455,25 @@ function ShadowingPage() {
                     </button>
                   </div>
 
-                  {mode === "youtube" ? (
+                  {mode === "facebook" ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        loadFacebook();
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        value={fbUrl}
+                        onChange={(e) => setFbUrl(e.target.value)}
+                        placeholder="Target URL: https://facebook.com/... or https://fb.watch/..."
+                        className="flex-1 bg-neutral-950 border border-white/5 px-3 py-2 text-xs text-white placeholder-neutral-600 rounded-lg focus:outline-none focus:border-[var(--color-crimson)]"
+                      />
+                      <button className="bg-[var(--color-crimson)] px-4 py-2 text-xs font-bold rounded-lg hover:opacity-95 transition shrink-0">
+                        Load Stream
+                      </button>
+                    </form>
+                  ) : mode === "youtube" ? (
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
@@ -487,8 +550,13 @@ function ShadowingPage() {
                             className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
                           />
                         ) : (
-                          <div className="flex items-center justify-center h-full text-[9px] text-neutral-500 uppercase">
-                            {v.source_type === "upload" ? "📁 Local File" : "▶ Stream"}
+                          <div className="flex flex-col items-center justify-center gap-1 h-full text-[9px] text-neutral-500 uppercase bg-gradient-to-br from-neutral-900 to-black">
+                            <Video size={14} className="opacity-60 text-[var(--color-crimson)]" />
+                            {v.source_type === "upload"
+                              ? "Local File"
+                              : v.source_type === "facebook"
+                                ? "Facebook"
+                                : "Stream"}
                           </div>
                         )}
                         {isActive && (
