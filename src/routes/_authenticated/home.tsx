@@ -24,7 +24,6 @@ function HomePage() {
         videosWeek,
         review,
         sessions,
-        journey,
       ] = await Promise.all([
         supabase.from("cards").select("id", { count: "exact", head: true }),
         supabase.from("cards").select("id", { count: "exact", head: true }).gte("created_at", oneWeekAgo),
@@ -34,7 +33,6 @@ function HomePage() {
         supabase.from("shadowing_videos").select("id", { count: "exact", head: true }).gte("created_at", oneWeekAgo),
         supabase.from("cards").select("id", { count: "exact", head: true }).eq("needs_review", true),
         supabase.from("fluency_sessions").select("completed_at").not("completed_at", "is", null).order("completed_at", { ascending: false }),
-        supabase.from("journey_cells").select("status"),
       ]);
 
       // Calculate streak
@@ -54,19 +52,6 @@ function HomePage() {
         }
       }
 
-      // Calculate journey stats
-      const mastered = (journey.data ?? []).filter((c) => c.status === "mastered").length;
-      const progressPct = Math.round((mastered / 25) * 100);
-      let rank = "Academy Student";
-      if (mastered >= 25) rank = "Kage";
-      else if (mastered >= 20) rank = "Jonin";
-      else if (mastered >= 15) rank = "Special Jonin";
-      else if (mastered >= 10) rank = "Chunin";
-      else if (mastered >= 5) rank = "Genin";
-
-      const level = Math.min(5, Math.floor(mastered / 5) + 1);
-      const nextLevel = Math.min(5, level + 1);
-
       return {
         cards: cards.count ?? 0,
         cardsWeek: cardsWeek.count ?? 0,
@@ -76,11 +61,6 @@ function HomePage() {
         videosWeek: videosWeek.count ?? 0,
         review: review.count ?? 0,
         streak,
-        mastered,
-        progressPct,
-        rank,
-        level,
-        nextLevel,
       };
     },
   });
@@ -190,40 +170,6 @@ function HomePage() {
                 Operational Activity
               </h3>
               <ContributionGrid />
-            </div>
-
-            {/* Ninja Rank Progression */}
-            <div className="glass-panel p-5 bg-gradient-to-b from-black/60 to-[#120403]/40 backdrop-blur-md border border border-[var(--color-gold)]/10 rounded-2xl shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-[var(--color-gold)]/5 rounded-full blur-2xl pointer-events-none" />
-
-              <h3 className="font-audiowide text-[10px] tracking-wider uppercase text-[var(--color-gold)] mb-3 block">
-                Linguistic Rank Progression
-              </h3>
-
-              <div className="mt-3 space-y-2.5">
-                <div className="flex justify-between items-end text-sm">
-                  <span className="font-audiowide text-[10px] uppercase text-[var(--color-muted-foreground)] tracking-widest">
-                    Shinobi Rank
-                  </span>
-                  <span className="font-audiowide text-xs text-[var(--color-gold)] font-bold tracking-wider drop-shadow-[0_0_8px_rgba(212,175,55,0.3)]">
-                    {stats.data?.rank ?? "Academy Student"}
-                  </span>
-                </div>
-
-                {/* HUD Progress Bar */}
-                <div className="w-full h-1.5 bg-black/60 rounded-full border border-white/5 p-[1px] overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[var(--color-crimson)] to-[var(--color-gold)] rounded-full shadow-[0_0_12px_var(--color-gold)] transition-all duration-1000 ease-out" 
-                    style={{ width: `${stats.data?.progressPct ?? 0}%` }}
-                  />
-                </div>
-
-                <div className="flex justify-between text-[8px] font-mono text-neutral-500 pt-0.5">
-                  <span>LEVEL 0{stats.data?.level ?? 1}</span>
-                  <span>{stats.data?.progressPct ?? 0}% SECURED</span>
-                  <span>LEVEL 0{stats.data?.nextLevel ?? 2}</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

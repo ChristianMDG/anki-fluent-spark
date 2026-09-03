@@ -1,11 +1,29 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { generateFluencyPrompt, generateDialogueReply, generateDialogueHint } from "@/lib/fluency.functions";
-import { currentTheme, SESSION_CONFIG, type SessionLength } from "@/lib/fluency-themes";
-import { SITUATION_META, COMPLEXITY_META, type JourneySituation } from "@/lib/journey";
+import {
+  generateSessionTheme,
+  generateFluencyPrompt,
+  generateDialogueReply,
+  generateDialogueHint,
+  generateSpeakingFeedback,
+  extractAndSaveWeakPoint,
+} from "@/lib/fluency.functions";
+import {
+  SESSION_CONFIG,
+  type SessionLength,
+} from "@/lib/fluency-themes";
+import {
+  CEFR_LEVELS,
+  nextCefrLevel,
+  type CefrLevel,
+  type LearnerProfile,
+  type LearnerWeakPoint,
+} from "@/integrations/supabase/learner-profile.types";
+import { WeakPointsPanel } from "@/components/fluency/WeakPointsPanel";
+import { getSpeechRecognitionCtor, type SpeechRecognitionLike } from "@/lib/speech";
 import { z } from "zod";
 import {
   Mic,
@@ -17,31 +35,34 @@ import {
   Flame,
   ChevronRight,
   ArrowLeft,
-  Compass,
   Lightbulb,
   Subtitles,
   Loader2,
   CheckCircle2,
+  RefreshCw,
+  TrendingUp,
+  X,
+  Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/fluency/")({
-  validateSearch: (s: Record<string, unknown>) =>
-    z.object({ journeyCell: z.string().uuid().optional() }).parse(s),
+  validateSearch: () => ({}),
   component: FluencyPage,
 });
 
 type ExerciseType = "free_talk" | "chunk_repeat" | "dialogue";
 
+interface DialogueTurn {
+  speaker: "ai" | "learner";
+  text: string;
+}
+
 interface Exercise {
   type: ExerciseType;
-  prompt: string; // text prompt for free_talk/dialogue; joined chunks for chunk_repeat
+  prompt: string;
   chunks?: string[];
-  // Only populated for "dialogue" exercises — carried through so the
-  // interactive conversation can keep generating replies in the right
-  // situation/complexity/vocabulary context, not just for the opening line.
-  situation?: JourneySituation;
-  complexityLevel?: number;
   vocab?: string[];
 }
 
@@ -53,14 +74,230 @@ interface RecordingState {
   recordingId?: string;
   ratings: { fluency: number; confidence: number; hesitation: number };
   pinned: boolean;
+  dialogueTurns?: DialogueTurn[];
 }
 
 type SessionMode = "mixed" | "free_talk" | "chunk_repeat" | "dialogue";
 
+// ---------------------------------------------------------------------------
+// Hooks — Learner Profile
+// ---------------------------------------------------------------------------
+
+function useLearnerProfile() {
+  const qc = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ["learner-profile"],
+    queryFn: async (): Promise<LearnerProfile> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Lazy-init profile row if missing
+      await (
+        supabase.rpc as unknown as (
+          fn: string,
+          args: { _user: string },
+        ) => Promise<unknown>
+      )("ensure_learner_profile", { _user: user.id });
+
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              single: () => Promise<{ data: LearnerProfile | null; error: unknown }>;
+            };
+          };
+        };
+      })
+        .from("learner_profile")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+
+      if (error) throw error;
+      return (data as LearnerProfile | null) ?? {
+        id: "",
+        user_id: user.id,
+        current_level: "B1",
+        created_at: new Date().toISOString(),
+      };
+    },
+    staleTime: 30_000,
+  });
+
+  const setLevel = useCallback(
+    async (level: CefrLevel) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const now = new Date().toISOString();
+      await (supabase as unknown as {
+        from: (t: string) => {
+          update: (vals: Record<string, unknown>) => {
+            eq: (col: string, val: string) => Promise<{ error: unknown }>;
+          };
+        };
+      })
+        .from("learner_profile")
+        .update({
+          current_level: level,
+          level_updated_at: now,
+          updated_at: now,
+        })
+        .eq("user_id", user.id);
+
+      qc.invalidateQueries({ queryKey: ["learner-profile"] });
+    },
+    [qc],
+  );
+
+  return { profile: query.data, setLevel, isLoading: query.isLoading };
+}
+
+function useWeakPoints() {
+  const qc = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ["learner-weak-points"],
+    queryFn: async (): Promise<LearnerWeakPoint[]> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              eq: (col: string, val: boolean) => {
+                order: (col: string, opts: Record<string, boolean>) => {
+                  limit: (n: number) => Promise<{ data: LearnerWeakPoint[] | null }>;
+                };
+              };
+            };
+          };
+        };
+      })
+        .from("learner_weak_points")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("resolved", false)
+        .order("occurrences", { ascending: false })
+        .limit(10);
+
+      return (data as LearnerWeakPoint[] | null) ?? [];
+    },
+    staleTime: 20_000,
+  });
+
+  const resolveWeakPoint = useCallback(
+    async (id: string) => {
+      await (supabase as unknown as {
+        from: (t: string) => {
+          update: (vals: Record<string, unknown>) => {
+            eq: (col: string, val: string) => Promise<{ error: unknown }>;
+          };
+        };
+      })
+        .from("learner_weak_points")
+        .update({ resolved: true })
+        .eq("id", id);
+
+      qc.invalidateQueries({ queryKey: ["learner-weak-points"] });
+    },
+    [qc],
+  );
+
+  return {
+    weakPoints: query.data ?? [],
+    resolveWeakPoint,
+    refetch: () => qc.invalidateQueries({ queryKey: ["learner-weak-points"] }),
+  };
+}
+
+interface LevelUpSuggestion {
+  show: boolean;
+  currentLevel: CefrLevel;
+  nextLevel: CefrLevel;
+}
+
+const LEVEL_UP_DISMISS_KEY = "fluency_levelup_dismissed";
+const DISMISS_SESSIONS_COOLDOWN = 5;
+
+function useLevelUpSuggestion(profile: LearnerProfile | undefined) {
+  const currentLevel = profile?.current_level ?? "B1";
+  const next = nextCefrLevel(currentLevel);
+
+  const { data: recentRecordings } = useQuery({
+    queryKey: ["fluency-level-up-check", currentLevel],
+    enabled: !!profile && !!next,
+    queryFn: async (): Promise<{ fluency_rating: number | null; confidence_rating: number | null }[]> => {
+      const { data } = await supabase
+        .from("fluency_recordings")
+        .select("fluency_rating, confidence_rating")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const suggestion = useMemo((): LevelUpSuggestion | null => {
+    if (!next || !recentRecordings || recentRecordings.length < 5) return null;
+
+    const rated = recentRecordings.filter(
+      (r) => r.fluency_rating != null && r.confidence_rating != null,
+    );
+    if (rated.length < 5) return null;
+
+    const avgFluency =
+      rated.reduce((s, r) => s + (r.fluency_rating ?? 0), 0) / rated.length;
+    const avgConfidence =
+      rated.reduce((s, r) => s + (r.confidence_rating ?? 0), 0) / rated.length;
+
+    if (avgFluency < 4.2 || avgConfidence < 4.2) return null;
+
+    try {
+      const raw = localStorage.getItem(LEVEL_UP_DISMISS_KEY);
+      if (raw) {
+        const { level, sessionCount } = JSON.parse(raw) as {
+          level: string;
+          sessionCount: number;
+        };
+        if (level === currentLevel) {
+          if (recentRecordings.length - sessionCount < DISMISS_SESSIONS_COOLDOWN) return null;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return { show: true, currentLevel, nextLevel: next };
+  }, [next, recentRecordings, currentLevel]);
+
+  const dismiss = useCallback(() => {
+    try {
+      localStorage.setItem(
+        LEVEL_UP_DISMISS_KEY,
+        JSON.stringify({ level: currentLevel, sessionCount: recentRecordings?.length ?? 0 }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [currentLevel, recentRecordings]);
+
+  return { suggestion, dismiss };
+}
+
+// ---------------------------------------------------------------------------
+// Main page component
+// ---------------------------------------------------------------------------
+
 function FluencyPage() {
-  const search = Route.useSearch();
-  const journeyCellId = search.journeyCell;
-  const theme = useMemo(() => currentTheme(), []);
   const [phase, setPhase] = useState<"entry" | "session" | "summary">("entry");
   const [length, setLength] = useState<SessionLength>("standard");
   const [sessionMode, setSessionMode] = useState<SessionMode>("mixed");
@@ -69,53 +306,66 @@ function FluencyPage() {
   const [recordings, setRecordings] = useState<RecordingState[]>([]);
   const [step, setStep] = useState(0);
 
+  const [sessionTheme, setSessionTheme] = useState<string>("Weekend plans and hobbies");
+  const [themeLoading, setThemeLoading] = useState(false);
+
   const streak = useFluencyStreak();
+  const getTheme = useServerFn(generateSessionTheme);
   const genPrompt = useServerFn(generateFluencyPrompt);
   const qc = useQueryClient();
 
-  const { data: cell } = useQuery({
-    queryKey: ["journey-cell", journeyCellId],
-    enabled: !!journeyCellId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("journey_cells")
-        .select("*")
-        .eq("id", journeyCellId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
+  const { profile, setLevel, isLoading: profileLoading } = useLearnerProfile();
+  const { weakPoints, resolveWeakPoint, refetch: refetchWeakPoints } = useWeakPoints();
+  const { suggestion: levelUpSuggestion, dismiss: dismissLevelUp } = useLevelUpSuggestion(profile);
 
-  async function pickVocabWords(situation: JourneySituation | null): Promise<string[]> {
+  const cefrLevel = profile?.current_level ?? "B1";
+
+  // Fetch initial theme when profile level changes or component mounts
+  const fetchThemeForLevel = useCallback(
+    async (lvl: CefrLevel) => {
+      setThemeLoading(true);
+      try {
+        const { theme } = await getTheme({ data: { level: lvl } });
+        setSessionTheme(theme);
+      } catch {
+        setSessionTheme("Weekend plans and hobbies");
+      } finally {
+        setThemeLoading(false);
+      }
+    },
+    [getTheme],
+  );
+
+  useEffect(() => {
+    if (profile?.current_level) {
+      void fetchThemeForLevel(profile.current_level);
+    }
+  }, [profile?.current_level, fetchThemeForLevel]);
+
+  async function handleSetLevel(lvl: CefrLevel) {
+    await setLevel(lvl);
+    await fetchThemeForLevel(lvl);
+  }
+
+  async function handleRefreshTheme() {
+    await fetchThemeForLevel(cefrLevel);
+  }
+
+  async function pickVocabWords(): Promise<string[]> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return [];
-    let words: string[] = [];
-    if (situation) {
-      const { data } = await supabase
-        .from("cards")
-        .select("word")
-        .contains("tags", [situation])
-        .limit(20);
-      words = (data ?? []).map((r) => r.word);
-    }
-    if (words.length < 3) {
-      const { data } = await supabase
-        .from("cards")
-        .select("word")
-        .order("created_at", { ascending: false })
-        .limit(40);
-      const extras = (data ?? []).map((r) => r.word).filter((w) => !words.includes(w));
-      words = [...words, ...extras];
-    }
+    const { data } = await supabase
+      .from("cards")
+      .select("word")
+      .order("created_at", { ascending: false })
+      .limit(40);
+    const words = (data ?? []).map((r) => r.word);
     return shuffle(words).slice(0, Math.min(3, words.length));
   }
 
   async function buildExercises(count: number): Promise<Exercise[]> {
-    // Map session mode to the exercise type(s) to cycle through.
-    // "mixed" rotates all three; focused modes repeat their single type.
     const modeToOrder: Record<SessionMode, ExerciseType[]> = {
       mixed: ["free_talk", "chunk_repeat", "dialogue"],
       free_talk: ["free_talk"],
@@ -124,9 +374,9 @@ function FluencyPage() {
     };
     const order: ExerciseType[] = modeToOrder[sessionMode];
     const chunks = await loadChunksPool();
-    const situation = (cell?.situation ?? null) as JourneySituation | null;
-    const complexityLevel = cell?.complexity_level ?? undefined;
-    const vocab = cell ? await pickVocabWords(situation) : [];
+    const vocab = await pickVocabWords();
+    const topWeakPoints = weakPoints.slice(0, 2).map((p) => p.tag);
+
     const out: Exercise[] = [];
     for (let i = 0; i < count; i++) {
       const type = order[i % order.length];
@@ -134,36 +384,31 @@ function FluencyPage() {
         const picked = chunks.length
           ? shuffle(chunks).slice(0, Math.min(5, Math.max(3, chunks.length)))
           : ["on the other hand", "to be honest", "at the end of the day", "as far as I know"];
-        out.push({ type, prompt: picked.join(" • "), chunks: picked });
+        out.push({ type, prompt: picked.join(" • "), chunks: picked, vocab });
       } else {
         try {
           const { prompt } = await genPrompt({
             data: {
               type,
-              weekTheme: theme.title,
-              ...(situation ? { situation } : {}),
-              ...(complexityLevel ? { complexityLevel } : {}),
+              theme: sessionTheme,
+              level: cefrLevel,
               ...(vocab.length ? { vocabularyWords: vocab } : {}),
+              ...(topWeakPoints.length ? { focusAreas: topWeakPoints } : {}),
             },
           });
           out.push({
             type,
             prompt,
-            ...(type === "dialogue"
-              ? {
-                  situation: situation ?? undefined,
-                  complexityLevel,
-                  vocab,
-                }
-              : {}),
+            vocab,
           });
-        } catch (e) {
+        } catch {
           out.push({
             type,
             prompt:
               type === "free_talk"
-                ? `Talk for a minute about something related to: ${theme.title}.`
-                : `So, what did you get up to this week?`,
+                ? `Talk for a minute about: ${sessionTheme}.`
+                : `What's your perspective on ${sessionTheme}?`,
+            vocab,
           });
         }
       }
@@ -183,10 +428,7 @@ function FluencyPage() {
         .insert({
           user_id: user.id,
           session_length: length,
-          week_theme: cell
-            ? `${SITUATION_META[cell.situation as JourneySituation].label} · ${COMPLEXITY_META[cell.complexity_level].label}`
-            : theme.title,
-          journey_cell_id: journeyCellId ?? null,
+          week_theme: sessionTheme,
         })
         .select()
         .single();
@@ -211,21 +453,12 @@ function FluencyPage() {
         .update({ completed_at: new Date().toISOString() })
         .eq("id", sessionId);
     }
-    if (cell) {
-      await supabase
-        .from("journey_cells")
-        .update({ sessions_completed: (cell.sessions_completed ?? 0) + 1 })
-        .eq("id", cell.id);
-      qc.invalidateQueries({ queryKey: ["journey-cells"] });
-      qc.invalidateQueries({ queryKey: ["journey-cell", cell.id] });
-    }
     setPhase("summary");
   }
 
   if (phase === "entry") {
     return (
       <FluencyEntry
-        theme={theme}
         length={length}
         setLength={setLength}
         sessionMode={sessionMode}
@@ -233,15 +466,22 @@ function FluencyPage() {
         onStart={() => startSession.mutate()}
         starting={startSession.isPending}
         streak={streak.data ?? 0}
-        journeyCell={
-          cell
-            ? {
-                situation: cell.situation as JourneySituation,
-                complexityLevel: cell.complexity_level,
-                sessionsCompleted: cell.sessions_completed ?? 0,
-              }
-            : null
-        }
+        profile={profile ?? null}
+        profileLoading={profileLoading}
+        onSetLevel={handleSetLevel}
+        sessionTheme={sessionTheme}
+        themeLoading={themeLoading}
+        onRefreshTheme={handleRefreshTheme}
+        weakPoints={weakPoints}
+        onResolveWeakPoint={resolveWeakPoint}
+        levelUpSuggestion={levelUpSuggestion}
+        onLevelUp={async () => {
+          if (levelUpSuggestion) {
+            await handleSetLevel(levelUpSuggestion.nextLevel);
+            dismissLevelUp();
+          }
+        }}
+        onDismissLevelUp={dismissLevelUp}
       />
     );
   }
@@ -254,14 +494,16 @@ function FluencyPage() {
         key={step}
         exercise={ex}
         sessionId={sessionId}
-        weekTheme={theme.title}
+        sessionTheme={sessionTheme}
+        cefrLevel={cefrLevel}
         stepIndex={step}
         totalSteps={exercises.length}
         freeTalkSeconds={SESSION_CONFIG[length].freeTalkSeconds}
         onComplete={(rec) => {
           setRecordings((prev) => [...prev, rec]);
+          refetchWeakPoints();
           if (step + 1 < exercises.length) setStep(step + 1);
-          else finishSession();
+          else void finishSession();
         }}
         onBack={() => {
           setPhase("entry");
@@ -299,7 +541,7 @@ function FluencyPage() {
               }}
               className="btn-crimson rounded-lg px-5 py-2.5"
             >
-              Back to Home
+              Back to Fluency Entry
             </button>
             <Link
               to="/fluency/journal"
@@ -315,9 +557,11 @@ function FluencyPage() {
   return null;
 }
 
-// ---------- Entry ----------
+// ---------------------------------------------------------------------------
+// Entry Screen
+// ---------------------------------------------------------------------------
+
 function FluencyEntry({
-  theme,
   length,
   setLength,
   sessionMode,
@@ -325,9 +569,18 @@ function FluencyEntry({
   onStart,
   starting,
   streak,
-  journeyCell,
+  profile,
+  profileLoading,
+  onSetLevel,
+  sessionTheme,
+  themeLoading,
+  onRefreshTheme,
+  weakPoints,
+  onResolveWeakPoint,
+  levelUpSuggestion,
+  onLevelUp,
+  onDismissLevelUp,
 }: {
-  theme: { title: string; description: string };
   length: SessionLength;
   setLength: (l: SessionLength) => void;
   sessionMode: SessionMode;
@@ -335,24 +588,34 @@ function FluencyEntry({
   onStart: () => void;
   starting: boolean;
   streak: number;
-  journeyCell: {
-    situation: JourneySituation;
-    complexityLevel: number;
-    sessionsCompleted: number;
-  } | null;
+  profile: LearnerProfile | null;
+  profileLoading: boolean;
+  onSetLevel: (level: CefrLevel) => Promise<void>;
+  sessionTheme: string;
+  themeLoading: boolean;
+  onRefreshTheme: () => Promise<void>;
+  weakPoints: LearnerWeakPoint[];
+  onResolveWeakPoint: (id: string) => Promise<void>;
+  levelUpSuggestion: { show: boolean; currentLevel: CefrLevel; nextLevel: CefrLevel } | null;
+  onLevelUp: () => Promise<void>;
+  onDismissLevelUp: () => void;
 }) {
   useCleanupExpired();
-  const sit = journeyCell ? SITUATION_META[journeyCell.situation] : null;
-  const cx = journeyCell ? COMPLEXITY_META[journeyCell.complexityLevel] : null;
+  const [levelingUp, setLevelingUp] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const showBanner = levelUpSuggestion?.show && !bannerDismissed;
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      {/* ---- Header ---- */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <p className="label-mono text-[color:var(--color-gold)]">Fluency Practice</p>
+          <p className="label-mono text-[color:var(--color-gold)]">Fluency Coach</p>
           <h1 className="text-3xl md:text-4xl font-bold mt-1">Speak like a native.</h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
-            A module dedicated to speaking fluency and oral confidence. Record yourself,
-            listen back, and measure your progress.
+            A module dedicated to speaking fluency and oral confidence. Practice spontaneous
+            conversation, listen back, and track your speaking growth.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -372,32 +635,125 @@ function FluencyEntry({
         </div>
       </div>
 
-      {journeyCell && sit && cx ? (
-        <div className="glass-panel p-6 md:p-8 border-[color:var(--color-crimson-glow)]">
-          <div className="flex items-center gap-2 label-mono text-[color:var(--color-crimson-glow)]">
-            <Compass size={14} /> Path · {sit.icon} {sit.label} — {cx.label}
+      {/* ---- Learner Profile Card ---- */}
+      <div className="glass-panel p-6 md:p-8 space-y-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="label-mono">Your CEFR Level</p>
+            {profileLoading ? (
+              <div className="flex items-center gap-2 mt-2 text-muted-foreground text-sm">
+                <Loader2 size={14} className="animate-spin" /> Loading profile…
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {CEFR_LEVELS.map((lvl) => {
+                  const active = (profile?.current_level ?? "B1") === lvl;
+                  return (
+                    <button
+                      key={lvl}
+                      onClick={() => onSetLevel(lvl)}
+                      className={`px-3.5 py-1.5 rounded-full border text-sm font-semibold transition motion-safe:transition-all ${
+                        active
+                          ? "border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/20 text-white shadow-[0_0_12px_rgba(237,28,36,0.3)] scale-105"
+                          : "border-[color:var(--color-border)] text-muted-foreground hover:border-[color:var(--color-border)]/80 hover:text-foreground"
+                      }`}
+                      aria-pressed={active}
+                    >
+                      {lvl}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <h2 className="text-2xl font-bold mt-2">{cx.description}</h2>
-          <p className="text-muted-foreground mt-2">{sit.description}</p>
-          <p className="text-sm text-muted-foreground mt-3">
-            Progress: {journeyCell.sessionsCompleted}/5 sessions. The vocabulary already learned
-            will be integrated into the exercises.
-          </p>
-          <Link
-            to="/parcours"
-            className="mt-3 inline-block text-xs text-muted-foreground underline hover:text-foreground"
-          >
-            ← Back to Path
-          </Link>
         </div>
-      ) : (
-        <div className="glass-panel p-6 md:p-8">
-          <p className="label-mono">Weekly Theme</p>
-          <h2 className="text-2xl font-bold mt-1 text-[color:var(--color-gold)]">{theme.title}</h2>
-          <p className="text-muted-foreground mt-2">{theme.description}</p>
-        </div>
-      )}
 
+        {/* Level-up suggestion banner */}
+        {showBanner && levelUpSuggestion && (
+          <div className="rounded-xl border border-[color:var(--color-gold)]/40 bg-[color:var(--color-gold)]/8 px-5 py-4 flex items-start gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+            <TrendingUp size={18} className="text-[color:var(--color-gold)] shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">
+                You've been doing great at {levelUpSuggestion.currentLevel} — ready to try{" "}
+                {levelUpSuggestion.nextLevel}?
+              </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button
+                  onClick={async () => {
+                    setLevelingUp(true);
+                    await onLevelUp();
+                    setLevelingUp(false);
+                    setBannerDismissed(true);
+                  }}
+                  disabled={levelingUp}
+                  className="btn-crimson rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {levelingUp ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />}
+                  Level up to {levelUpSuggestion.nextLevel}
+                </button>
+                <button
+                  onClick={() => {
+                    onDismissLevelUp();
+                    setBannerDismissed(true);
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-xs border border-[color:var(--color-border)] hover:bg-white/5 text-muted-foreground"
+                >
+                  Not yet
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                onDismissLevelUp();
+                setBannerDismissed(true);
+              }}
+              className="text-muted-foreground hover:text-foreground shrink-0"
+              aria-label="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        <WeakPointsPanel
+          weakPoints={weakPoints}
+          onResolve={onResolveWeakPoint}
+          compact
+        />
+      </div>
+
+      {/* ---- AI Theme Card ---- */}
+      <div className="glass-panel p-6 md:p-8 relative overflow-hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 label-mono text-[color:var(--color-gold)]">
+              <Sparkles size={14} /> AI Session Topic
+            </div>
+            <h2 className="text-2xl font-bold mt-2 text-[color:var(--color-gold)] flex items-center gap-2 min-h-[36px]">
+              {themeLoading ? (
+                <span className="flex items-center gap-2 text-muted-foreground text-lg font-normal">
+                  <Loader2 size={18} className="animate-spin text-[color:var(--color-gold)]" /> AI is crafting a topic for {profile?.current_level ?? "B1"}…
+                </span>
+              ) : (
+                sessionTheme
+              )}
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              AI-generated conversation scenario tailored for level {profile?.current_level ?? "B1"}.
+            </p>
+          </div>
+          <button
+            onClick={() => void onRefreshTheme()}
+            disabled={themeLoading}
+            className="shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm border border-[color:var(--color-border)] hover:bg-white/5 text-muted-foreground hover:text-foreground transition disabled:opacity-50"
+            title="Generate a new topic"
+          >
+            <RefreshCw size={14} className={themeLoading ? "animate-spin" : ""} /> 🔄 New theme
+          </button>
+        </div>
+      </div>
+
+      {/* ---- Session Duration ---- */}
       <div>
         <p className="label-mono mb-3">Session Duration</p>
         <div className="grid md:grid-cols-3 gap-3">
@@ -410,7 +766,7 @@ function FluencyEntry({
                 onClick={() => setLength(k)}
                 className={`glass-panel p-5 text-left transition ${
                   active
-                    ? "border-[color:var(--color-crimson-glow)] -translate-y-0.5"
+                    ? "border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/10 -translate-y-0.5 shadow-[0_0_15px_rgba(237,28,36,0.15)]"
                     : "hover:-translate-y-0.5"
                 }`}
               >
@@ -427,6 +783,7 @@ function FluencyEntry({
         </div>
       </div>
 
+      {/* ---- Session Type Selector ---- */}
       <div>
         <p className="label-mono mb-3">Session Type</p>
         <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -436,61 +793,75 @@ function FluencyEntry({
                 key: "mixed" as const,
                 label: "Mixed",
                 desc: "Rotates through Free Talk, Chunk Repeat, and Dialogue.",
+                icon: Sparkles,
               },
               {
                 key: "free_talk" as const,
                 label: "Free Talk only",
                 desc: "Every exercise is an open-ended speaking prompt.",
+                icon: Mic,
               },
               {
                 key: "chunk_repeat" as const,
                 label: "Chunk Repeat only",
                 desc: "Every exercise is a set of expressions to repeat aloud.",
+                icon: Volume2,
               },
               {
                 key: "dialogue" as const,
                 label: "Dialogue only",
-                desc: "Real back-and-forth AI conversation — speak and get a natural reply.",
+                desc: "Real back-and-forth AI conversation with live voice transcript.",
+                icon: MessageSquare,
               },
             ] as const
           ).map((m) => {
             const active = sessionMode === m.key;
+            const Icon = m.icon;
             return (
               <button
                 key={m.key}
                 onClick={() => setSessionMode(m.key)}
-                className={`glass-panel p-5 text-left transition ${
+                className={`glass-panel p-5 text-left transition flex flex-col justify-between ${
                   active
-                    ? "border-[color:var(--color-crimson-glow)] -translate-y-0.5"
+                    ? "border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/10 -translate-y-0.5 shadow-[0_0_15px_rgba(237,28,36,0.15)]"
                     : "hover:-translate-y-0.5"
                 }`}
               >
-                <div className="text-lg font-semibold">{m.label}</div>
-                <p className="text-sm text-muted-foreground mt-1">{m.desc}</p>
+                <div>
+                  <div className="flex items-center gap-2 text-lg font-semibold">
+                    <Icon size={18} className={active ? "text-[color:var(--color-crimson-glow)]" : "text-muted-foreground"} />
+                    {m.label}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{m.desc}</p>
+                </div>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-2">
         <button
           onClick={onStart}
-          disabled={starting}
-          className="btn-crimson rounded-lg px-6 py-3 text-base font-semibold flex items-center gap-2 disabled:opacity-50"
+          disabled={starting || themeLoading}
+          className="btn-crimson rounded-lg px-6 py-3 text-base font-semibold flex items-center gap-2 disabled:opacity-50 shadow-[0_4px_20px_rgba(237,28,36,0.25)]"
         >
-          {starting ? "Preparing..." : "Start Session"} <ChevronRight size={18} />
+          {starting ? "Preparing exercises…" : "Start Session"} <ChevronRight size={18} />
         </button>
       </div>
     </div>
   );
 }
 
-// ---------- Session runner ----------
+// ---------------------------------------------------------------------------
+// Session runner
+// ---------------------------------------------------------------------------
+
 function SessionRunner({
   exercise,
   sessionId,
-  weekTheme,
+  sessionTheme,
+  cefrLevel,
   stepIndex,
   totalSteps,
   freeTalkSeconds,
@@ -499,7 +870,8 @@ function SessionRunner({
 }: {
   exercise: Exercise;
   sessionId: string;
-  weekTheme: string;
+  sessionTheme: string;
+  cefrLevel: string;
   stepIndex: number;
   totalSteps: number;
   freeTalkSeconds: number;
@@ -516,6 +888,9 @@ function SessionRunner({
   const streamRef = useRef<MediaStream | null>(null);
   const startTsRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const getSpeakingFeedback = useServerFn(generateSpeakingFeedback);
+  const saveWeakPoint = useServerFn(extractAndSaveWeakPoint);
 
   const maxSeconds = exercise.type === "free_talk" ? freeTalkSeconds : 120;
 
@@ -562,7 +937,7 @@ function SessionRunner({
         setElapsed(e);
         if (exercise.type === "free_talk" && e >= maxSeconds) stopRecording();
       }, 250);
-    } catch (err) {
+    } catch {
       toast.error(
         "Microphone access denied. Please allow microphone access in your browser settings to continue.",
       );
@@ -588,9 +963,6 @@ function SessionRunner({
   }
 
   function handleBack() {
-    // Recording in progress or an unsaved take sitting in the review step
-    // would be silently discarded by navigating away — confirm first so a
-    // stray click doesn't lose audio the person just recorded.
     if (recording || result) {
       const ok = window.confirm(
         "You have an unsaved recording for this exercise. Going back will discard it. Continue?",
@@ -599,6 +971,23 @@ function SessionRunner({
       if (recording) stopRecording();
     }
     onBack();
+  }
+
+  function triggerSilentFeedback(promptText: string, dialogueTurns?: DialogueTurn[]) {
+    getSpeakingFeedback({
+      data: {
+        exerciseType: exercise.type === "dialogue" ? "dialogue" : "free_talk",
+        promptText: promptText.slice(0, 300),
+        cefrLevel,
+        ...(dialogueTurns ? { dialogueTurns } : {}),
+      },
+    })
+      .then(({ tip }) =>
+        saveWeakPoint({ data: { tip } })
+      )
+      .catch(() => {
+        /* silent */
+      });
   }
 
   async function uploadAndFinalize() {
@@ -613,7 +1002,7 @@ function SessionRunner({
       let storagePath = result.storagePath;
       let recordingId = result.recordingId;
 
-      if (!storagePath) {
+      if (!storagePath && result.blob.size > 0) {
         const path = `${user.id}/${sessionId}/${crypto.randomUUID()}.webm`;
         const { error: upErr } = await supabase.storage
           .from("fluency-recordings")
@@ -630,8 +1019,8 @@ function SessionRunner({
             session_id: sessionId,
             exercise_type: exercise.type,
             prompt_text: exercise.prompt,
-            week_theme: weekTheme,
-            storage_path: storagePath,
+            week_theme: sessionTheme,
+            storage_path: storagePath ?? null,
             duration_seconds: result.durationSec,
             fluency_rating: ratings.fluency,
             confidence_rating: ratings.confidence,
@@ -654,10 +1043,13 @@ function SessionRunner({
           .eq("id", recordingId);
       }
 
+      if (exercise.type === "free_talk" || exercise.type === "dialogue") {
+        triggerSilentFeedback(exercise.prompt, result.dialogueTurns);
+      }
+
       onComplete({ ...result, storagePath, recordingId, ratings });
     } catch (e) {
       toast.error(e instanceof Error ? `Upload failed: ${e.message}` : "Upload failed");
-      // keep result so user can retry
     } finally {
       setSaving(false);
     }
@@ -697,17 +1089,11 @@ function SessionRunner({
       </div>
 
       {exercise.type === "dialogue" ? (
-        // Real back-and-forth conversation: the browser transcribes what the
-        // learner says (SpeechRecognition), the AI replies naturally
-        // (generateDialogueReply) and speaks it (SpeechSynthesis) — instead
-        // of reacting once to a single static line. Internally records
-        // continuous audio for the journal/rating flow below, exactly like
-        // the other exercise types once it hands back a result.
         <InteractiveDialogue
           key={`${exercise.prompt}:${dialogueRetryKey}`}
           openingLine={exercise.prompt}
-          situation={exercise.situation}
-          complexityLevel={exercise.complexityLevel}
+          sessionTheme={sessionTheme}
+          cefrLevel={cefrLevel}
           vocab={exercise.vocab}
           result={result}
           onFinish={(r: RecordingState) => setResult(r)}
@@ -738,7 +1124,7 @@ function SessionRunner({
               </div>
             ) : (
               <>
-                <p className="label-mono">Prompt</p>
+                <p className="label-mono">Prompt ({cefrLevel} · {sessionTheme})</p>
                 <p className="text-xl md:text-2xl font-medium mt-2 leading-relaxed">
                   {exercise.prompt}
                 </p>
@@ -758,7 +1144,7 @@ function SessionRunner({
                 aria-label={recording ? "Stop recording" : "Start recording"}
               >
                 {recording && (
-                  <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
+                  <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-reduce:hidden animate-ping" />
                 )}
                 <span className="relative z-10">
                   {recording ? <Square size={36} /> : <Mic size={36} />}
@@ -787,7 +1173,11 @@ function SessionRunner({
         <div className="space-y-4">
           <div className="glass-panel p-5 space-y-3">
             <p className="label-mono">Your take ({formatTime(result.durationSec)})</p>
-            <audio src={result.url} controls className="w-full" />
+            {result.url ? (
+              <audio src={result.url} controls className="w-full" />
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Text-based dialogue completed without audio stream.</p>
+            )}
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={retryRecording}
@@ -833,7 +1223,7 @@ function SessionRunner({
             />
             <div className="flex justify-end">
               <button
-                onClick={uploadAndFinalize}
+                onClick={() => void uploadAndFinalize()}
                 disabled={saving}
                 className="btn-crimson rounded-lg px-5 py-2.5 disabled:opacity-50 flex items-center gap-2"
               >
@@ -848,52 +1238,21 @@ function SessionRunner({
 }
 
 // ---------------------------------------------------------------------------
-// InteractiveDialogue — a real spoken back-and-forth instead of a single
-// static prompt. The browser transcribes the learner's speech, the AI
-// generates a natural follow-up line and speaks it, and the whole exchange
-// is recorded as one continuous take for the journal/rating flow shared
-// with the other exercise types (via `onFinish`).
+// InteractiveDialogue — real back-and-forth AI dialogue with Web Speech API,
+// continuous single MediaRecorder audio stream, and fallback support.
 // ---------------------------------------------------------------------------
-
-interface DialogueTurn {
-  speaker: "ai" | "learner";
-  text: string;
-}
-
-// Minimal shape of the non-standard Web Speech API (webkit-prefixed in most
-// browsers, absent in Safari/Firefox at the time of writing) — kept narrow
-// and local instead of `any` so the fallback path stays type-safe.
-interface SpeechRecognitionLike extends EventTarget {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  onresult: ((ev: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-}
-
-function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: new () => SpeechRecognitionLike;
-    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
 
 function InteractiveDialogue({
   openingLine,
-  situation,
-  complexityLevel,
+  sessionTheme,
+  cefrLevel,
   vocab,
   result,
   onFinish,
 }: {
   openingLine: string;
-  situation?: JourneySituation;
-  complexityLevel?: number;
+  sessionTheme: string;
+  cefrLevel: string;
   vocab?: string[];
   result: RecordingState | null;
   onFinish: (r: RecordingState) => void;
@@ -922,7 +1281,7 @@ function InteractiveDialogue({
   const learnerTurnCount = turns.filter((t) => t.speaker === "learner").length;
   const canFinish = learnerTurnCount >= 2 && !finishing && !result;
 
-  // Speak each new AI line as it arrives.
+  // Speak opening AI line and each subsequent AI turn
   useEffect(() => {
     const last = turns[turns.length - 1];
     if (last?.speaker === "ai" && typeof window !== "undefined" && window.speechSynthesis) {
@@ -931,7 +1290,6 @@ function InteractiveDialogue({
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turns]);
 
   useEffect(() => {
@@ -945,15 +1303,19 @@ function InteractiveDialogue({
   async function ensureRecorderStarted() {
     if (recorderRef.current) return;
     if (typeof MediaRecorder === "undefined") return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-    chunksRef.current = [];
-    rec.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
-    rec.start();
-    recorderRef.current = rec;
-    startTsRef.current = Date.now();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
+      rec.start();
+      recorderRef.current = rec;
+      startTsRef.current = Date.now();
+    } catch {
+      /* media stream permission denied or unavailable for recording */
+    }
   }
 
   async function sendLearnerTurn(text: string) {
@@ -966,7 +1328,12 @@ function InteractiveDialogue({
     setThinking(true);
     try {
       const { text: reply } = await getReply({
-        data: { history: nextTurns, situation, complexityLevel, vocabularyWords: vocab },
+        data: {
+          history: nextTurns,
+          theme: sessionTheme,
+          level: cefrLevel as "A1" | "A2" | "B1" | "B2" | "C1" | "C2",
+          vocabularyWords: vocab,
+        },
       });
       setTurns((prev) => [...prev, { speaker: "ai", text: reply }]);
     } catch {
@@ -977,37 +1344,26 @@ function InteractiveDialogue({
   }
 
   async function startListening() {
-    try {
-      await ensureRecorderStarted();
-    } catch {
-      toast.error("Mic access denied. Allow microphone access in your browser settings.");
-      return;
-    }
+    await ensureRecorderStarted();
     const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) return; // handled by the typed-reply fallback UI instead
+    if (!Ctor) return;
     const rec = new Ctor();
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.continuous = false;
     rec.onresult = (ev) => {
-      let finalText = "";
       let interim = "";
       for (let i = 0; i < ev.results.length; i++) {
-        const r = ev.results[i][0];
-        // Heuristic: the Web Speech API marks finality on the result item,
-        // not exposed in this narrow type — treat the last chunk as final
-        // once recognition ends instead of relying on `.isFinal` typing.
-        interim += r.transcript;
+        interim += ev.results[i][0].transcript;
       }
-      finalText = interim;
-      setInterimText(finalText);
+      setInterimText(interim);
     };
     rec.onerror = () => setListening(false);
     rec.onend = () => {
       setListening(false);
       recognitionRef.current = null;
       setInterimText((current) => {
-        if (current.trim()) sendLearnerTurn(current);
+        if (current.trim()) void sendLearnerTurn(current);
         return "";
       });
     };
@@ -1024,7 +1380,13 @@ function InteractiveDialogue({
   async function requestHint() {
     setHintLoading(true);
     try {
-      const { starter } = await getHint({ data: { history: turns } });
+      const { starter } = await getHint({
+        data: {
+          history: turns,
+          theme: sessionTheme,
+          level: cefrLevel as "A1" | "A2" | "B1" | "B2" | "C1" | "C2",
+        },
+      });
       setHint(starter);
     } catch {
       toast.error("Couldn't fetch a hint right now.");
@@ -1033,14 +1395,12 @@ function InteractiveDialogue({
     }
   }
 
-  async function finishConversation() {
+  function finishConversation() {
     setFinishing(true);
     window.speechSynthesis?.cancel();
     recognitionRef.current?.stop();
     const rec = recorderRef.current;
     if (!rec || rec.state === "inactive") {
-      // Nothing was ever recorded (e.g. mic never granted) — still let the
-      // learner move on with an empty placeholder rather than getting stuck.
       finishedRef.current = true;
       onFinish({
         blob: new Blob([], { type: "audio/webm" }),
@@ -1048,6 +1408,7 @@ function InteractiveDialogue({
         durationSec: 0,
         ratings: { fluency: 3, confidence: 3, hesitation: 3 },
         pinned: false,
+        dialogueTurns: turns,
       });
       return;
     }
@@ -1064,6 +1425,7 @@ function InteractiveDialogue({
         durationSec,
         ratings: { fluency: 3, confidence: 3, hesitation: 3 },
         pinned: false,
+        dialogueTurns: turns,
       });
     };
     rec.stop();
@@ -1092,9 +1454,10 @@ function InteractiveDialogue({
         </div>
       )}
 
+      {/* Chat Bubbles */}
       <div className="glass-panel p-6 md:p-8 space-y-4">
         <div className="flex items-center justify-between">
-          <p className="label-mono">Conversation</p>
+          <p className="label-mono">Interactive Conversation ({cefrLevel} · {sessionTheme})</p>
           <button
             onClick={() => setCaptionsOn((v) => !v)}
             className="text-xs text-muted-foreground hover:text-foreground transition flex items-center gap-1.5"
@@ -1104,17 +1467,17 @@ function InteractiveDialogue({
           </button>
         </div>
 
-        <div className="space-y-2.5 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+        <div className="space-y-3 max-h-72 overflow-y-auto custom-scrollbar pr-1">
           {turns.map((t, i) => (
             <div
               key={i}
               className={`flex ${t.speaker === "ai" ? "justify-start" : "justify-end"}`}
             >
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
+                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   t.speaker === "ai"
-                    ? "bg-white/5 border border-[color:var(--color-border)] rounded-tl-sm"
-                    : "bg-[color:var(--color-crimson)]/25 border border-[color:var(--color-crimson-glow)]/30 rounded-tr-sm"
+                    ? "bg-white/5 border border-[color:var(--color-border)] rounded-tl-sm text-foreground"
+                    : "bg-[color:var(--color-crimson)]/25 border border-[color:var(--color-crimson-glow)]/40 text-white rounded-tr-sm shadow-[0_0_10px_rgba(237,28,36,0.15)]"
                 } ${captionsOn ? "" : "blur-sm select-none"}`}
               >
                 {t.text}
@@ -1123,8 +1486,8 @@ function InteractiveDialogue({
           ))}
           {thinking && (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-tl-sm px-4 py-2 bg-white/5 border border-[color:var(--color-border)]">
-                <Loader2 size={14} className="animate-spin text-muted-foreground" />
+              <div className="rounded-2xl rounded-tl-sm px-4 py-2.5 bg-white/5 border border-[color:var(--color-border)] flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 size={14} className="animate-spin text-[color:var(--color-gold)]" /> AI is thinking of a reply…
               </div>
             </div>
           )}
@@ -1148,17 +1511,17 @@ function InteractiveDialogue({
           {supportsSpeech ? (
             <>
               <button
-                onClick={listening ? stopListening : startListening}
+                onClick={listening ? stopListening : () => void startListening()}
                 disabled={thinking}
                 className={`relative h-20 w-20 rounded-full flex items-center justify-center transition disabled:opacity-40 ${
                   listening
                     ? "bg-[color:var(--color-crimson)] text-white"
-                    : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white"
+                    : "bg-[color:var(--color-crimson)]/80 hover:bg-[color:var(--color-crimson)] text-white shadow-[0_0_20px_rgba(237,28,36,0.3)]"
                 }`}
                 aria-label={listening ? "Stop and send" : "Speak your reply"}
               >
                 {listening && (
-                  <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-safe:animate-ping" />
+                  <span className="absolute inset-0 rounded-full bg-[color:var(--color-crimson)] opacity-60 motion-reduce:hidden animate-ping" />
                 )}
                 <span className="relative z-10">
                   {listening ? <Square size={26} /> : <Mic size={26} />}
@@ -1167,19 +1530,18 @@ function InteractiveDialogue({
               <p className="text-sm text-muted-foreground text-center min-h-[20px]">
                 {listening
                   ? interimText || "Listening…"
-                  : "Press and speak your reply, then press again to send"}
+                  : "Press to speak your reply, then press again to send"}
               </p>
             </>
           ) : (
             <div className="w-full space-y-2">
               <p className="text-xs text-muted-foreground text-center">
-                Your browser doesn't support voice recognition — speak your reply out loud, then
-                type it below to continue.
+                Speech recognition is not supported in this browser — speak your reply out loud, then type it below to continue.
               </p>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  ensureRecorderStarted().finally(() => sendLearnerTurn(typedReply));
+                  void ensureRecorderStarted().finally(() => sendLearnerTurn(typedReply));
                 }}
                 className="flex gap-2"
               >
@@ -1202,7 +1564,7 @@ function InteractiveDialogue({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={requestHint}
+              onClick={() => void requestHint()}
               disabled={hintLoading}
               className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-border)] hover:bg-white/5 flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition disabled:opacity-50"
             >
@@ -1211,13 +1573,13 @@ function InteractiveDialogue({
               ) : (
                 <Lightbulb size={13} />
               )}
-              Need a hint?
+              💡 Need a hint?
             </button>
             {canFinish && (
               <button
                 onClick={finishConversation}
                 disabled={finishing}
-                className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-gold)]/40 text-[color:var(--color-gold)] hover:bg-[color:var(--color-gold)]/10 flex items-center gap-1.5 transition"
+                className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-gold)]/50 text-[color:var(--color-gold)] bg-[color:var(--color-gold)]/10 hover:bg-[color:var(--color-gold)]/20 flex items-center gap-1.5 transition font-semibold"
               >
                 <CheckCircle2 size={13} /> Finish conversation
               </button>
@@ -1233,6 +1595,9 @@ function InteractiveDialogue({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Rating slider
+// ---------------------------------------------------------------------------
 
 function RatingSlider({
   label,
@@ -1280,7 +1645,10 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
   );
 }
 
-// ---------- Helpers & hooks ----------
+// ---------------------------------------------------------------------------
+// Helpers & hooks
+// ---------------------------------------------------------------------------
+
 function labelType(t: ExerciseType) {
   return t === "free_talk" ? "Free Talk" : t === "chunk_repeat" ? "Chunk Repeat" : "Dialogue";
 }
@@ -1349,7 +1717,6 @@ function useFluencyStreak() {
       );
       let streak = 0;
       const cursor = new Date();
-      // If today not present, start from yesterday
       if (!days.has(cursor.toISOString().slice(0, 10))) {
         cursor.setDate(cursor.getDate() - 1);
         if (!days.has(cursor.toISOString().slice(0, 10))) return 0;

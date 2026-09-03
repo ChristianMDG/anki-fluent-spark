@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Pin, PinOff } from "lucide-react";
+import { ArrowLeft, Pin, PinOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   LineChart,
@@ -14,6 +14,13 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import {
+  CEFR_LEVELS,
+  type CefrLevel,
+  type LearnerProfile,
+  type LearnerWeakPoint,
+} from "@/integrations/supabase/learner-profile.types";
+import { WeakPointsPanel } from "@/components/fluency/WeakPointsPanel";
 
 export const Route = createFileRoute("/_authenticated/fluency/journal")({
   component: FluencyJournal,
@@ -34,11 +41,101 @@ type Row = {
   created_at: string;
 };
 
+// ---------- Learner Profile queries (same pattern as fluency.index.tsx) ----------
+
+function useLearnerProfileReadOnly() {
+  return useQuery({
+    queryKey: ["learner-profile"],
+    queryFn: async (): Promise<LearnerProfile | null> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              maybeSingle: () => Promise<{ data: LearnerProfile | null; error: unknown }>;
+            };
+          };
+        };
+      })
+        .from("learner_profile")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      return (data as LearnerProfile | null) ?? null;
+    },
+    staleTime: 30_000,
+  });
+}
+
+function useWeakPointsReadOnly() {
+  const qc = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ["learner-weak-points"],
+    queryFn: async (): Promise<LearnerWeakPoint[]> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              eq: (col: string, val: boolean) => {
+                order: (col: string, opts: Record<string, boolean>) => {
+                  limit: (n: number) => Promise<{ data: LearnerWeakPoint[] | null }>;
+                };
+              };
+            };
+          };
+        };
+      })
+        .from("learner_weak_points")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("resolved", false)
+        .order("occurrences", { ascending: false })
+        .limit(20);
+
+      return (data as LearnerWeakPoint[] | null) ?? [];
+    },
+    staleTime: 20_000,
+  });
+
+  const resolveWeakPoint = async (id: string) => {
+    await (supabase as unknown as {
+      from: (t: string) => {
+        update: (vals: Record<string, unknown>) => {
+          eq: (col: string, val: string) => Promise<{ error: unknown }>;
+        };
+      };
+    })
+      .from("learner_weak_points")
+      .update({ resolved: true })
+      .eq("id", id);
+
+    qc.invalidateQueries({ queryKey: ["learner-weak-points"] });
+  };
+
+  return { weakPoints: query.data ?? [], resolveWeakPoint, isLoading: query.isLoading };
+}
+
+// ---------- Main journal component ----------
+
 function FluencyJournal() {
   const qc = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
+
+  const { data: profile, isLoading: profileLoading } = useLearnerProfileReadOnly();
+  const { weakPoints, resolveWeakPoint } = useWeakPointsReadOnly();
 
   const { data: rows = [] } = useQuery({
     queryKey: ["fluency-journal", typeFilter, from, to],
@@ -75,11 +172,30 @@ function FluencyJournal() {
     qc.invalidateQueries({ queryKey: ["fluency-journal"] });
   }
 
+  // Derive a simple level history note
+  const levelHistory = useMemo(() => {
+    if (!profile) return null;
+    const created = new Date(profile.created_at);
+    const updated = profile.level_updated_at ? new Date(profile.level_updated_at) : new Date(profile.created_at);
+    const diffDays = Math.round((updated.getTime() - created.getTime()) / 86_400_000);
+    if (diffDays < 2) return null; // level was never changed
+    return {
+      updatedAt: updated.toLocaleDateString("en-US", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+      level: profile.current_level,
+    };
+  }, [profile]);
+
+  const hasWeakPoints = weakPoints.length > 0;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <p className="label-mono text-[color:var(--color-gold)]">Fluency Practice</p>
+          <p className="label-mono text-[color:var(--color-gold)]">Fluency Coach</p>
           <h1 className="text-3xl font-bold mt-1">Fluency Journal</h1>
         </div>
         <Link
@@ -90,6 +206,61 @@ function FluencyJournal() {
         </Link>
       </div>
 
+      {/* ---- Coach Profile Panel ---- */}
+      <div className="glass-panel p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="label-mono mb-2">Learner Profile</p>
+            {profileLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <Loader2 size={14} className="animate-spin" /> Loading…
+              </div>
+            ) : profile ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="label-mono text-xs text-muted-foreground">Current level:</span>
+                  <span
+                    className="px-3 py-0.5 rounded-full border border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/20 text-sm font-semibold"
+                  >
+                    {profile.current_level}
+                  </span>
+                  <span className="label-mono text-xs text-muted-foreground">
+                    ({CEFR_LEVELS.indexOf(profile.current_level as CefrLevel) + 1} of{" "}
+                    {CEFR_LEVELS.length})
+                  </span>
+                </div>
+                {levelHistory && (
+                  <p className="text-xs text-muted-foreground">
+                    Level updated to {levelHistory.level} on {levelHistory.updatedAt}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No profile yet — start a Fluency session to create one.
+              </p>
+            )}
+          </div>
+          {!hasWeakPoints && (
+            <p className="text-xs text-muted-foreground italic self-end">
+              No growth areas tracked yet.
+            </p>
+          )}
+        </div>
+
+        {hasWeakPoints && (
+          <div>
+            <p className="label-mono text-xs mb-3">Growth Areas</p>
+            <WeakPointsPanel
+              weakPoints={weakPoints}
+              onResolve={resolveWeakPoint}
+              compact={false}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ---- Trend Chart ---- */}
       <div className="glass-panel p-5">
         <p className="label-mono mb-3">3-Month Trend (weekly averages)</p>
         {trend.length === 0 ? (
@@ -142,6 +313,7 @@ function FluencyJournal() {
         )}
       </div>
 
+      {/* ---- Filters ---- */}
       <div className="glass-panel-soft p-4 rounded-xl flex flex-wrap gap-3 items-end">
         <div>
           <label className="label-mono block mb-1">Type</label>
@@ -177,6 +349,7 @@ function FluencyJournal() {
         </div>
       </div>
 
+      {/* ---- Pinned ---- */}
       {pinned.length > 0 && (
         <section className="space-y-3">
           <h2 className="label-mono text-[color:var(--color-gold)]">📌 Pinned</h2>
@@ -188,6 +361,7 @@ function FluencyJournal() {
         </section>
       )}
 
+      {/* ---- All recordings ---- */}
       <section className="space-y-4">
         {grouped.length === 0 ? (
           <div className="glass-panel p-8 text-center text-muted-foreground">
@@ -308,11 +482,6 @@ function labelType(t: string) {
 function groupByDay(rows: Row[]): [string, Row[]][] {
   const map = new Map<string, Row[]>();
   for (const r of rows) {
-    // Bucket by LOCAL calendar day, not UTC. `.toISOString().slice(0, 10)`
-    // reads the UTC date, which mis-files any recording made in the first
-    // few hours after local midnight into the previous day for users ahead
-    // of UTC (e.g. UTC+3 in Antananarivo) — a late-night Retell it session
-    // could silently show up under yesterday's heading.
     const d = new Date(r.created_at);
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
       d.getDate(),
@@ -324,9 +493,6 @@ function groupByDay(rows: Row[]): [string, Row[]][] {
 }
 
 function formatDay(d: string) {
-  // `d` is a local "YYYY-MM-DD" key built above. Parse it as local
-  // components (not `new Date(d)`, which treats a bare date string as UTC
-  // midnight and would shift the displayed weekday for the same reason).
   const [y, m, day] = d.split("-").map(Number);
   return new Date(y, m - 1, day).toLocaleDateString("en-US", {
     weekday: "long",

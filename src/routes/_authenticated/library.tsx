@@ -39,7 +39,7 @@ type SortMode = "recent" | "alpha";
 function GeneratePage() {
   const genFn = useServerFn(generateVocabCard);
   const qc = useQueryClient();
-  const navigate = useNavigate({ from: "/library" });
+  const navigate = useNavigate();
   const search = Route.useSearch();
   const reviewOnly = search.review === "1";
   const inputRef = useRef<HTMLInputElement>(null);
@@ -118,7 +118,8 @@ function GeneratePage() {
 
   function toggleReview() {
     navigate({
-      search: () => (reviewOnly ? {} : { review: "1" as const }),
+      to: "/library",
+      search: { review: reviewOnly ? undefined : "1" },
     });
   }
 

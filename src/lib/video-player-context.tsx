@@ -19,8 +19,98 @@ export function supportsTransportControls(v: PersistentVideo | null): boolean {
   return !!v && v.source_type !== "facebook";
 }
 
-export function facebookEmbedSrc(url: string): string {
-  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=560`;
+export function facebookEmbedSrc(url: string, width?: number, height?: number): string {
+  const params = new URLSearchParams();
+  params.set("href", url);
+  params.set("show_text", "false");
+  if (width && width > 0) {
+    params.set("width", String(width));
+  } else {
+    params.set("width", "560");
+  }
+  if (height && height > 0) {
+    params.set("height", String(height));
+  }
+  return `https://www.facebook.com/plugins/video.php?${params.toString()}`;
+}
+
+function FacebookPlayer({ url, title }: { url: string; title: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [dims, setDims] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const updateDims = () => {
+      const w = Math.max(280, Math.floor(el.clientWidth));
+      const h = Math.max(160, Math.floor(el.clientHeight));
+      if (w > 0 && h > 0) {
+        setDims((prev) => {
+          if (prev && Math.abs(prev.width - w) < 4 && Math.abs(prev.height - h) < 4) {
+            return prev;
+          }
+          return { width: w, height: h };
+        });
+      }
+    };
+
+    updateDims();
+
+    const ro = new ResizeObserver(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(updateDims, 100);
+    });
+
+    ro.observe(el);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      ro.disconnect();
+    };
+  }, [url]);
+
+  const embedUrl = useMemo(() => {
+    const w = dims?.width ?? 560;
+    const h = dims?.height ?? Math.round(w * (9 / 16));
+    return facebookEmbedSrc(url, w, h);
+  }, [url, dims]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full bg-black flex items-center justify-center overflow-hidden relative"
+    >
+      {dims ? (
+        <iframe
+          key={`${url}-${dims.width}-${dims.height}`}
+          src={embedUrl}
+          width={dims.width}
+          height={dims.height}
+          style={{
+            width: `${dims.width}px`,
+            height: `${dims.height}px`,
+            maxWidth: "100%",
+            maxHeight: "100%",
+            border: "none",
+            overflow: "hidden",
+          }}
+          className="block bg-black"
+          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+          allowFullScreen
+          scrolling="no"
+          frameBorder="0"
+          title={title}
+        />
+      ) : (
+        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+          Loading Facebook Video…
+        </div>
+      )}
+    </div>
+  );
 }
 
 export interface PersistentVideo {
@@ -338,15 +428,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
                 title={video.title}
               />
             ) : video.source_type === "facebook" && video.source_url ? (
-              <iframe
-                src={facebookEmbedSrc(video.source_url)}
-                className="w-full h-full block"
-                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                allowFullScreen
-                scrolling="no"
-                frameBorder="0"
-                title={video.title}
-              />
+              <FacebookPlayer url={video.source_url} title={video.title} />
             ) : uploadedUrl ? (
               <video
                 ref={videoRef}
