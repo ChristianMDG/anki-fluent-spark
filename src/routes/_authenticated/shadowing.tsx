@@ -344,26 +344,32 @@ function ShadowingPage() {
 
                 {/* Command Deck Controls & Telemetry */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/5 pt-3">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => player.seek(-5)}
-                      className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
-                    >
-                      <Rewind size={12} /> -5s
-                    </button>
-                    <button
-                      onClick={player.playPause}
-                      className="bg-[var(--color-crimson)] px-4 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1 shadow-[0_0_10px_rgba(220,38,38,0.2)] hover:opacity-90"
-                    >
-                      <Play size={11} className="fill-current" /> / <Pause size={11} />
-                    </button>
-                    <button
-                      onClick={() => player.seek(5)}
-                      className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
-                    >
-                      +5s <FastForward size={12} />
-                    </button>
-                  </div>
+                  {supportsTransportControls(currentVideo) ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => player.seek(-5)}
+                        className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
+                      >
+                        <Rewind size={12} /> -5s
+                      </button>
+                      <button
+                        onClick={player.playPause}
+                        className="bg-[var(--color-crimson)] px-4 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1 shadow-[0_0_10px_rgba(220,38,38,0.2)] hover:opacity-90"
+                      >
+                        <Play size={11} className="fill-current" /> / <Pause size={11} />
+                      </button>
+                      <button
+                        onClick={() => player.seek(5)}
+                        className="bg-neutral-900 border border-white/5 hover:border-[var(--color-crimson)] px-3 py-1.5 text-xs rounded-lg transition flex items-center gap-1"
+                      >
+                        +5s <FastForward size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] uppercase tracking-wider text-neutral-500">
+                      Use the Facebook player's own controls
+                    </p>
+                  )}
 
                   <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                     <span className="text-[11px] text-[var(--color-gold)] font-audiowide bg-neutral-950/80 px-2.5 py-1.5 border border-white/5 rounded-md">
