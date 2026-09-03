@@ -362,14 +362,16 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
           </div>
           {!slotEl && (
             <div className="glass-panel-soft border-t border-[color:var(--color-crimson-glow)]/50 backdrop-blur-lg bg-black/70 flex items-center gap-1 px-2 h-10">
-              <button
-                onClick={playPause}
-                className="p-1.5 rounded hover:bg-white/10 text-[color:var(--color-gold)]"
-                aria-label={isPlaying ? "Pause" : "Play"}
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? <Pause size={14} /> : <Play size={14} />}
-              </button>
+              {supportsTransportControls(video) && (
+                <button
+                  onClick={playPause}
+                  className="p-1.5 rounded hover:bg-white/10 text-[color:var(--color-gold)]"
+                  aria-label={isPlaying ? "Pause" : "Play"}
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+              )}
               <div className="flex-1 min-w-0 text-[11px] truncate px-1">{video.title}</div>
               <button
                 onClick={() => navigate({ to: "/shadowing" })}
