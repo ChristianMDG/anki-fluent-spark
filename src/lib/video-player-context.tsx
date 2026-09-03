@@ -177,6 +177,22 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, [video?.id, uploadedUrl]);
 
+  // Facebook: plugin exposes no play-state API — approximate with tab visibility
+  useEffect(() => {
+    if (!video || video.source_type !== "facebook") return;
+    const sync = () => {
+      const visible = document.visibilityState === "visible";
+      playingRef.current = visible;
+      setIsPlaying(visible);
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      document.removeEventListener("visibilitychange", sync);
+      playingRef.current = false;
+    };
+  }, [video?.id, video?.source_type]);
+
   // Tick tracker
   useEffect(() => {
     if (!video) return;
