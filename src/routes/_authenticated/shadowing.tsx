@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
+import { VocabPreviewModal } from "@/components/VocabPreviewModal";
+import { FullLessonModal } from "@/components/FullLessonModal";
+import type { CardRow } from "@/components/VocabCard";
 import {
   useVideoPlayer,
   useVideoSlot,
@@ -651,6 +654,33 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const [previewState, setPreviewState] = useState<{
+    word: string;
+    cardId: string | null;
+    isGenerating: boolean;
+  } | null>(null);
+  const [fullLessonDetails, setFullLessonDetails] = useState<{
+    cardId: string;
+    word: string;
+    ipa: string;
+    level: string;
+  } | null>(null);
+
+  const activeCardQuery = useQuery({
+    queryKey: ["card_preview", previewState?.cardId],
+    queryFn: async (): Promise<CardRow | null> => {
+      if (!previewState?.cardId) return null;
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("id", previewState.cardId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as CardRow) ?? null;
+    },
+    enabled: !!previewState?.cardId,
+  });
+
   async function generateForNote(note: NoteRow) {
     try {
       const card = (await genFn({ data: { word: note.word } })) as { id: string };
@@ -658,8 +688,36 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
       qc.invalidateQueries({ queryKey: ["shadowing_notes", videoId] });
       qc.invalidateQueries({ queryKey: ["cards"] });
       toast.success(`Card generated for "${note.word}"`);
+      return card;
     } catch (e) {
       toast.error((e as Error).message);
+      return null;
+    }
+  }
+
+  async function handleSelectNote(note: NoteRow) {
+    if (note.card_id) {
+      setPreviewState({
+        word: note.word,
+        cardId: note.card_id,
+        isGenerating: false,
+      });
+    } else {
+      setPreviewState({
+        word: note.word,
+        cardId: null,
+        isGenerating: true,
+      });
+      const card = await generateForNote(note);
+      if (card?.id) {
+        setPreviewState({
+          word: note.word,
+          cardId: card.id,
+          isGenerating: false,
+        });
+      } else {
+        setPreviewState(null);
+      }
     }
   }
 
@@ -740,7 +798,8 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
             key={n.id}
             note={n}
             videoId={videoId}
-            onGenerate={() => generateForNote(n)}
+            onSelectWord={() => handleSelectNote(n)}
+            onGenerate={() => handleSelectNote(n)}
             onDelete={() => deleteNote(n.id)}
           />
         ))}
@@ -777,6 +836,36 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
           </button>
         </div>
       )}
+
+      {previewState && (
+        <VocabPreviewModal
+          word={previewState.word}
+          card={activeCardQuery.data ?? null}
+          loading={previewState.isGenerating || (activeCardQuery.isLoading && !activeCardQuery.data)}
+          onOpenFullLesson={() => {
+            if (activeCardQuery.data) {
+              setFullLessonDetails({
+                cardId: activeCardQuery.data.id,
+                word: activeCardQuery.data.word,
+                ipa: activeCardQuery.data.ipa ?? "",
+                level: activeCardQuery.data.level ?? "",
+              });
+            }
+            setPreviewState(null);
+          }}
+          onClose={() => setPreviewState(null)}
+        />
+      )}
+
+      {fullLessonDetails && (
+        <FullLessonModal
+          cardId={fullLessonDetails.cardId}
+          word={fullLessonDetails.word}
+          ipa={fullLessonDetails.ipa}
+          level={fullLessonDetails.level}
+          onClose={() => setFullLessonDetails(null)}
+        />
+      )}
     </div>
   );
 }
@@ -784,11 +873,13 @@ function NotesPanel({ videoId }: { videoId: string | null }) {
 function NoteItem({
   note,
   videoId,
+  onSelectWord,
   onGenerate,
   onDelete,
 }: {
   note: NoteRow;
   videoId: string | null;
+  onSelectWord: () => void;
   onGenerate: () => void;
   onDelete: () => void;
 }) {
@@ -847,7 +938,7 @@ function NoteItem({
 
   return (
     <div
-      className={`p-2.5 rounded-xl border border-white/5 bg-neutral-950/40 border-l-2 transition ${note.card_id ? "border-l-emerald-500/80 bg-emerald-950/5" : "border-l-[var(--color-gold)]/60"} ${note.card_id && !editing ? "opacity-60" : ""}`}
+      className={`p-2.5 rounded-xl border border-white/5 bg-neutral-950/40 border-l-2 transition ${note.card_id ? "border-l-emerald-500/80 bg-emerald-950/5" : "border-l-[var(--color-gold)]/60"} ${note.card_id && !editing ? "opacity-90" : ""}`}
     >
       {editing ? (
         <div className="space-y-2">
@@ -880,17 +971,31 @@ function NoteItem({
         </div>
       ) : (
         <div className="flex items-start justify-between gap-3 w-full min-w-0">
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="text-xs font-bold truncate text-white select-all">{note.word}</p>
+          <button
+            type="button"
+            onClick={onSelectWord}
+            className="min-w-0 flex-1 space-y-0.5 text-left group/word"
+            title="Click to preview flashcard"
+          >
+            <p className="text-xs font-bold truncate text-white group-hover/word:text-[color:var(--color-gold)] transition underline decoration-dotted decoration-white/30 underline-offset-2">
+              {note.word}
+            </p>
             {note.context && (
               <p className="text-[10px] text-neutral-500 line-clamp-2 leading-relaxed break-words">
                 {note.context}
               </p>
             )}
-          </div>
+          </button>
           <div className="flex gap-1.5 items-center shrink-0 self-start bg-neutral-950/60 p-0.5 rounded-md border border-white/5">
             {note.card_id ? (
-              <Check size={11} className="text-emerald-400 mx-1 shrink-0" />
+              <button
+                type="button"
+                onClick={onSelectWord}
+                title="View Flashcard"
+                className="p-1 hover:bg-white/5 text-emerald-400 rounded shrink-0 flex items-center"
+              >
+                <Check size={12} />
+              </button>
             ) : (
               <button
                 onClick={onGenerate}
