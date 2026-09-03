@@ -61,8 +61,9 @@ function ShadowingPage() {
   const player = useVideoPlayer();
   const slotRef = useVideoSlot();
 
-  const [mode, setMode] = useState<"youtube" | "upload">("youtube");
+  const [mode, setMode] = useState<VideoSourceType>("youtube");
   const [ytUrl, setYtUrl] = useState("");
+  const [fbUrl, setFbUrl] = useState("");
   const [uploading, setUploading] = useState(false);
 
   const currentVideo = player.video;
