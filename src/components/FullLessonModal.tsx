@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, RefreshCw, Volume2, Check } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -112,10 +113,18 @@ export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, 
     containerRef.current?.querySelector(`#${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const lesson = query.data;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex md:items-center md:p-6">
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-md flex md:items-center md:p-6">
       <div className="glass-panel w-full h-full md:h-[92vh] md:max-w-3xl md:mx-auto flex flex-col overflow-hidden">
         <header className="sticky top-0 z-10 flex items-center justify-between p-4 md:p-5 border-b border-[color:var(--color-border)] bg-black/40 backdrop-blur">
           <div>
@@ -326,7 +335,8 @@ export function FullLessonModal({ cardId, word, ipa, level, initialNeedsReview, 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Volume2, Book, Loader2 } from "lucide-react";
 import { examplesToHtml } from "@/lib/parse-card";
 import type { CardRow } from "./VocabCard";
@@ -27,17 +28,22 @@ export function VocabPreviewModal({
   onOpenFullLesson,
   onClose,
 }: Props) {
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  if (!mounted || typeof document === "undefined") return null;
+
   const displayWord = card?.word || word;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 motion-reduce:animate-none"
+      className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200 motion-reduce:animate-none"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -139,6 +145,7 @@ export function VocabPreviewModal({
           </footer>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
