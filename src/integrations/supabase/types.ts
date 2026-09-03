@@ -329,6 +329,7 @@ export type Database = {
           last_watched_at: string | null
           retell_skipped_count: number
           source_type: string
+          source_url: string | null
           storage_path: string | null
           thumbnail_url: string | null
           title: string | null
@@ -343,6 +344,7 @@ export type Database = {
           last_watched_at?: string | null
           retell_skipped_count?: number
           source_type: string
+          source_url?: string | null
           storage_path?: string | null
           thumbnail_url?: string | null
           title?: string | null
@@ -357,6 +359,7 @@ export type Database = {
           last_watched_at?: string | null
           retell_skipped_count?: number
           source_type?: string
+          source_url?: string | null
           storage_path?: string | null
           thumbnail_url?: string | null
           title?: string | null
