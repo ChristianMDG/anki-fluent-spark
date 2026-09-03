@@ -441,6 +441,12 @@ function ShadowingPage() {
                       YouTube
                     </button>
                     <button
+                      onClick={() => setMode("facebook")}
+                      className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider rounded transition ${mode === "facebook" ? "bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 text-white" : "text-neutral-500"}`}
+                    >
+                      Facebook
+                    </button>
+                    <button
                       onClick={() => setMode("upload")}
                       className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider rounded transition ${mode === "upload" ? "bg-[var(--color-crimson)]/20 border border-[var(--color-crimson)]/40 text-white" : "text-neutral-500"}`}
                     >
@@ -448,7 +454,25 @@ function ShadowingPage() {
                     </button>
                   </div>
 
-                  {mode === "youtube" ? (
+                  {mode === "facebook" ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        loadFacebook();
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        value={fbUrl}
+                        onChange={(e) => setFbUrl(e.target.value)}
+                        placeholder="Target URL: https://facebook.com/... or https://fb.watch/..."
+                        className="flex-1 bg-neutral-950 border border-white/5 px-3 py-2 text-xs text-white placeholder-neutral-600 rounded-lg focus:outline-none focus:border-[var(--color-crimson)]"
+                      />
+                      <button className="bg-[var(--color-crimson)] px-4 py-2 text-xs font-bold rounded-lg hover:opacity-95 transition shrink-0">
+                        Load Stream
+                      </button>
+                    </form>
+                  ) : mode === "youtube" ? (
                     <form
                       onSubmit={(e) => {
                         e.preventDefault();
