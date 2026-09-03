@@ -14,9 +14,10 @@ import { Play, Pause, X, Maximize2 } from "lucide-react";
 
 export interface PersistentVideo {
   id: string;
-  source_type: "youtube" | "upload";
+  source_type: VideoSourceType;
   youtube_id: string | null;
   storage_path: string | null;
+  source_url?: string | null;
   title: string;
   thumbnail_url: string;
   created_at: string;
