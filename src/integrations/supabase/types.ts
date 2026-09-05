@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       cards: {
         Row: {
+          card_state: "new" | "learning" | "review" | "relearning"
           cloze: string | null
           created_at: string
           definition: string | null
@@ -29,6 +30,7 @@ export type Database = {
           interval_days: number
           ipa: string | null
           last_reviewed_at: string | null
+          learning_step: number
           level: string | null
           needs_review: boolean
           pos: string | null
@@ -42,6 +44,7 @@ export type Database = {
           word: string
         }
         Insert: {
+          card_state?: "new" | "learning" | "review" | "relearning"
           cloze?: string | null
           created_at?: string
           definition?: string | null
@@ -55,6 +58,7 @@ export type Database = {
           interval_days?: number
           ipa?: string | null
           last_reviewed_at?: string | null
+          learning_step?: number
           level?: string | null
           needs_review?: boolean
           pos?: string | null
@@ -68,6 +72,7 @@ export type Database = {
           word: string
         }
         Update: {
+          card_state?: "new" | "learning" | "review" | "relearning"
           cloze?: string | null
           created_at?: string
           definition?: string | null
@@ -81,6 +86,7 @@ export type Database = {
           interval_days?: number
           ipa?: string | null
           last_reviewed_at?: string | null
+          learning_step?: number
           level?: string | null
           needs_review?: boolean
           pos?: string | null

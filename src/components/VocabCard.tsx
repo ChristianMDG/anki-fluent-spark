@@ -40,6 +40,8 @@ export interface CardRow {
   repetitions?: number;
   due_at?: string;
   last_reviewed_at?: string | null;
+  card_state?: "new" | "learning" | "review" | "relearning";
+  learning_step?: number;
 }
 
 const SUGGESTED_TAGS = ["Interview", "Daily Life", "Tech", "Travel", "Academic"];
