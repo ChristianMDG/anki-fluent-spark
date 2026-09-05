@@ -171,7 +171,10 @@ export function VocabCard({
         >
           {/* ---------------- FRONT ---------------- */}
           <article
+            aria-hidden={flipped}
             className={`absolute inset-0 flex flex-col glass-panel p-5 group overflow-hidden [backface-visibility:hidden] ${
+              flipped ? "pointer-events-none" : "pointer-events-auto"
+            } ${
               needsReview ? "!border-amber-500/50 shadow-[0_0_0_1px_rgba(245,158,11,0.15)]" : ""
             }`}
           >
@@ -247,7 +250,10 @@ export function VocabCard({
 
           {/* ---------------- BACK ---------------- */}
           <article
+            aria-hidden={!flipped}
             className={`absolute inset-0 flex flex-col glass-panel p-5 group overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+              flipped ? "pointer-events-auto" : "pointer-events-none"
+            } ${
               needsReview ? "!border-amber-500/50 shadow-[0_0_0_1px_rgba(245,158,11,0.15)]" : ""
             }`}
           >
