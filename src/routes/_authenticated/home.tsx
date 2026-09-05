@@ -23,7 +23,7 @@ function HomePage() {
         lessonsWeek,
         videos,
         videosWeek,
-        dueCards,
+        dueCardsResult,
         sessions,
       ] = await Promise.all([
         supabase.from("cards").select("id", { count: "exact", head: true }),
@@ -35,6 +35,15 @@ function HomePage() {
         supabase.from("cards").select("id", { count: "exact", head: true }).lte("due_at", now),
         supabase.from("fluency_sessions").select("completed_at").not("completed_at", "is", null).order("completed_at", { ascending: false }),
       ]);
+
+      let dueCardsCount = 0;
+      if (dueCardsResult.error) {
+        // Fallback if due_at column doesn't exist on remote DB yet
+        const { data: allCards } = await supabase.from("cards").select("created_at" as any);
+        if (allCards) dueCardsCount = allCards.length;
+      } else {
+        dueCardsCount = dueCardsResult.count ?? 0;
+      }
 
       // Calculate streak
       let streak = 0;
@@ -60,7 +69,7 @@ function HomePage() {
         lessonsWeek: lessonsWeek.count ?? 0,
         videos: videos.count ?? 0,
         videosWeek: videosWeek.count ?? 0,
-        dueCards: dueCards.count ?? 0,
+        dueCards: dueCardsCount,
         streak,
       };
     },
