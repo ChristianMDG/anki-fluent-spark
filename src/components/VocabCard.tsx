@@ -51,10 +51,12 @@ function speak(text: string) {
 export function VocabCard({
   card,
   compact = false,
+  layout = "grid",
   onDelete,
 }: {
   card: CardRow;
   compact?: boolean;
+  layout?: "grid" | "sidebar";
   onDelete?: () => void;
 }) {
   const [openLesson, setOpenLesson] = useState(false);
@@ -131,6 +133,10 @@ export function VocabCard({
   }
 
   const dossierNumber = card.id.replace(/-/g, "").slice(0, 6).toUpperCase();
+  const cardSize =
+    layout === "sidebar"
+      ? "w-full min-h-0 max-h-none h-[clamp(500px,125cqi,560px)]"
+      : "w-full min-h-[440px] max-h-[560px]";
 
   const statusBadge = needsReview ? (
     <span className="label-mono text-[9px] tracking-[0.15em] text-amber-300 border border-amber-500/30 rounded px-1.5 py-0.5 bg-amber-500/10 flex items-center gap-1 whitespace-nowrap">
@@ -154,7 +160,7 @@ export function VocabCard({
           Falls back to an instant swap (no 3D animation) for
           prefers-reduced-motion via the motion-reduce: variants. */}
       <div
-        className={`relative h-full min-h-[440px] max-h-[560px] [perspective:1600px] ${
+        className={`relative ${cardSize} [perspective:1600px] ${
           needsReview ? "" : ""
         }`}
       >
