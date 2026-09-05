@@ -273,7 +273,7 @@ function GeneratePage() {
       {gen.isPending && !currentCard && <CardSkeleton />}
 
       {currentCard && (
-        <section>
+        <section className="w-full [container-type:inline-size]">
           <div className="flex items-baseline justify-between mb-3">
             <p className="label-mono text-[color:var(--color-gold)]">Your card</p>
             <button
@@ -283,7 +283,13 @@ function GeneratePage() {
               <X size={12} /> Dismiss
             </button>
           </div>
-          <VocabCard card={currentCard} onDelete={() => deleteCard(currentCard.id)} />
+          <div className="w-full min-w-0">
+            <VocabCard
+              card={currentCard}
+              layout="sidebar"
+              onDelete={() => deleteCard(currentCard.id)}
+            />
+          </div>
         </section>
       )}
 
