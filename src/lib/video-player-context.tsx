@@ -420,6 +420,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
           <div className="relative w-full bg-black" style={{ height: slotEl ? "100%" : "135px" }}>
             {video.source_type === "youtube" && video.youtube_id ? (
               <iframe
+                key={video.id}
                 ref={iframeRef}
                 src={`https://www.youtube.com/embed/${video.youtube_id}?enablejsapi=1`}
                 className="w-full h-full block"
@@ -428,9 +429,10 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
                 title={video.title}
               />
             ) : video.source_type === "facebook" && video.source_url ? (
-              <FacebookPlayer url={video.source_url} title={video.title} />
+              <FacebookPlayer key={video.id} url={video.source_url} title={video.title} />
             ) : uploadedUrl ? (
               <video
+                key={video.id}
                 ref={videoRef}
                 src={uploadedUrl}
                 controls

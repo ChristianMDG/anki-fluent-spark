@@ -179,8 +179,9 @@ function ShadowingPage() {
 
   const showSkipBanner = !bannerDismissed && (skipSum.data ?? 0) > 3;
 
-  async function loadYoutube() {
-    const id = extractYouTubeId(ytUrl.trim());
+  async function loadYoutube(urlOverride?: string) {
+    const raw = (urlOverride ?? ytUrl).trim();
+    const id = extractYouTubeId(raw);
     if (!id) return toast.error("Invalid YouTube URL");
     let title = "";
     let thumbnail_url = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
@@ -210,12 +211,13 @@ function ShadowingPage() {
     if (error) return toast.error(error.message);
     player.setVideo(data as VideoRow, null);
     setYtUrl("");
+    setFbUrl("");
     qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
   }
 
-  async function loadFacebook() {
-    const url = fbUrl.trim();
+  async function loadFacebook(urlOverride?: string) {
+    const url = (urlOverride ?? fbUrl).trim();
     if (!isFacebookVideoUrl(url)) return toast.error("Invalid Facebook video URL");
     const { data, error } = await supabase
       .from("shadowing_videos")
@@ -231,8 +233,21 @@ function ShadowingPage() {
     if (error) return toast.error(error.message);
     player.setVideo(data as VideoRow, null);
     setFbUrl("");
+    setYtUrl("");
     qc.invalidateQueries({ queryKey: ["shadowing_videos"] });
     qc.invalidateQueries({ queryKey: ["stats"] });
+  }
+
+  async function loadAnyStream(inputUrl?: string) {
+    const raw = (inputUrl ?? ytUrl).trim();
+    if (!raw) return;
+    if (isFacebookVideoUrl(raw)) {
+      await loadFacebook(raw);
+    } else if (extractYouTubeId(raw)) {
+      await loadYoutube(raw);
+    } else {
+      toast.error("Invalid video URL (YouTube or Facebook link required)");
+    }
   }
 
   async function handleUpload(file: File) {
@@ -394,15 +409,15 @@ function ShadowingPage() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    loadYoutube();
+                    loadAnyStream();
                   }}
                   className="flex gap-2 border-t border-white/5 pt-3"
                 >
-                  <Youtube size={13} className="shrink-0 self-center text-[var(--color-crimson)] opacity-70" />
+                  <Video size={13} className="shrink-0 self-center text-[var(--color-crimson)] opacity-70" />
                   <input
                     value={ytUrl}
                     onChange={(e) => setYtUrl(e.target.value)}
-                    placeholder="Swap stream — paste new YouTube URL…"
+                    placeholder="Swap stream — paste YouTube or Facebook URL…"
                     className="flex-1 min-w-0 bg-neutral-950 border border-white/5 px-3 py-1.5 text-xs text-white placeholder-neutral-600 rounded-lg focus:outline-none focus:border-[var(--color-crimson)]"
                   />
                   <button

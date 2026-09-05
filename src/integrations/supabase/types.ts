@@ -19,15 +19,20 @@ export type Database = {
           cloze: string | null
           created_at: string
           definition: string | null
+          due_at: string
+          ease_factor: number
           examples: string | null
           exported: boolean
           french: string | null
           grammar: string | null
           id: string
+          interval_days: number
           ipa: string | null
+          last_reviewed_at: string | null
           level: string | null
           needs_review: boolean
           pos: string | null
+          repetitions: number
           speaking_a1: string | null
           speaking_a2: string | null
           speaking_q1: string | null
@@ -40,15 +45,20 @@ export type Database = {
           cloze?: string | null
           created_at?: string
           definition?: string | null
+          due_at?: string
+          ease_factor?: number
           examples?: string | null
           exported?: boolean
           french?: string | null
           grammar?: string | null
           id?: string
+          interval_days?: number
           ipa?: string | null
+          last_reviewed_at?: string | null
           level?: string | null
           needs_review?: boolean
           pos?: string | null
+          repetitions?: number
           speaking_a1?: string | null
           speaking_a2?: string | null
           speaking_q1?: string | null
@@ -61,15 +71,20 @@ export type Database = {
           cloze?: string | null
           created_at?: string
           definition?: string | null
+          due_at?: string
+          ease_factor?: number
           examples?: string | null
           exported?: boolean
           french?: string | null
           grammar?: string | null
           id?: string
+          interval_days?: number
           ipa?: string | null
+          last_reviewed_at?: string | null
           level?: string | null
           needs_review?: boolean
           pos?: string | null
+          repetitions?: number
           speaking_a1?: string | null
           speaking_a2?: string | null
           speaking_q1?: string | null

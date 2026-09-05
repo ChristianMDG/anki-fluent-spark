@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
+import { Route as AuthenticatedReviewRouteImport } from './routes/_authenticated/review'
 import { Route as AuthenticatedShadowingRouteImport } from './routes/_authenticated/shadowing'
 import { Route as AuthenticatedFluencyIndexRouteImport } from './routes/_authenticated/fluency.index'
 import { Route as AuthenticatedFluencyJournalRouteImport } from './routes/_authenticated/fluency.journal'
@@ -48,6 +49,11 @@ const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
   path: '/library',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedReviewRoute = AuthenticatedReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedShadowingRoute = AuthenticatedShadowingRouteImport.update({
   id: '/shadowing',
   path: '/shadowing',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
+  '/review': typeof AuthenticatedReviewRoute
   '/shadowing': typeof AuthenticatedShadowingRoute
   '/fluency/journal': typeof AuthenticatedFluencyJournalRoute
   '/fluency/': typeof AuthenticatedFluencyIndexRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
+  '/review': typeof AuthenticatedReviewRoute
   '/shadowing': typeof AuthenticatedShadowingRoute
   '/fluency/journal': typeof AuthenticatedFluencyJournalRoute
   '/fluency': typeof AuthenticatedFluencyIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
+  '/_authenticated/review': typeof AuthenticatedReviewRoute
   '/_authenticated/shadowing': typeof AuthenticatedShadowingRoute
   '/_authenticated/fluency/journal': typeof AuthenticatedFluencyJournalRoute
   '/_authenticated/fluency/': typeof AuthenticatedFluencyIndexRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/home'
     | '/library'
+    | '/review'
     | '/shadowing'
     | '/fluency/journal'
     | '/fluency/'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/home'
     | '/library'
+    | '/review'
     | '/shadowing'
     | '/fluency/journal'
     | '/fluency'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/home'
     | '/_authenticated/library'
+    | '/_authenticated/review'
     | '/_authenticated/shadowing'
     | '/_authenticated/fluency/journal'
     | '/_authenticated/fluency/'
@@ -182,6 +194,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLibraryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/review': {
+      id: '/_authenticated/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof AuthenticatedReviewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/shadowing': {
       id: '/_authenticated/shadowing'
       path: '/shadowing'
@@ -210,6 +229,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
+  AuthenticatedReviewRoute: typeof AuthenticatedReviewRoute
   AuthenticatedShadowingRoute: typeof AuthenticatedShadowingRoute
   AuthenticatedFluencyJournalRoute: typeof AuthenticatedFluencyJournalRoute
   AuthenticatedFluencyIndexRoute: typeof AuthenticatedFluencyIndexRoute
@@ -219,6 +239,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
+  AuthenticatedReviewRoute: AuthenticatedReviewRoute,
   AuthenticatedShadowingRoute: AuthenticatedShadowingRoute,
   AuthenticatedFluencyJournalRoute: AuthenticatedFluencyJournalRoute,
   AuthenticatedFluencyIndexRoute: AuthenticatedFluencyIndexRoute,

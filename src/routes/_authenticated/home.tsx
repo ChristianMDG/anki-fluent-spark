@@ -15,6 +15,7 @@ function HomePage() {
     queryKey: ["stats"],
     queryFn: async () => {
       const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const now = new Date().toISOString();
       const [
         cards,
         cardsWeek,
@@ -22,7 +23,7 @@ function HomePage() {
         lessonsWeek,
         videos,
         videosWeek,
-        review,
+        dueCards,
         sessions,
       ] = await Promise.all([
         supabase.from("cards").select("id", { count: "exact", head: true }),
@@ -31,7 +32,7 @@ function HomePage() {
         supabase.from("lessons").select("id", { count: "exact", head: true }).gte("created_at", oneWeekAgo),
         supabase.from("shadowing_videos").select("id", { count: "exact", head: true }),
         supabase.from("shadowing_videos").select("id", { count: "exact", head: true }).gte("created_at", oneWeekAgo),
-        supabase.from("cards").select("id", { count: "exact", head: true }).eq("needs_review", true),
+        supabase.from("cards").select("id", { count: "exact", head: true }).lte("due_at", now),
         supabase.from("fluency_sessions").select("completed_at").not("completed_at", "is", null).order("completed_at", { ascending: false }),
       ]);
 
@@ -59,11 +60,13 @@ function HomePage() {
         lessonsWeek: lessonsWeek.count ?? 0,
         videos: videos.count ?? 0,
         videosWeek: videosWeek.count ?? 0,
-        review: review.count ?? 0,
+        dueCards: dueCards.count ?? 0,
         streak,
       };
     },
   });
+
+  const dueCount = stats.data?.dueCards ?? 0;
 
   return (
     <div className="w-full h-full bg-transparent text-white selection:bg-[var(--color-crimson)] selection:text-white relative select-none perspective-1000 box-border">
@@ -128,25 +131,28 @@ function HomePage() {
             value={stats.data?.cards ?? 0}
             label="Total Cards"
             change={`+${stats.data?.cardsWeek ?? 0} this week`}
+            to="/library"
           />
           <StatCard
             icon={Play}
             value={stats.data?.lessons ?? 0}
             label="Lessons Completed"
             change={`+${stats.data?.lessonsWeek ?? 0} this week`}
+            to="/library"
           />
           <StatCard
             icon={Sparkles}
             value={stats.data?.videos ?? 0}
             label="Shadowing Vault"
             change={`+${stats.data?.videosWeek ?? 0} this week`}
+            to="/shadowing"
           />
           <StatCard
             icon={Target}
-            value={stats.data?.review ?? 0}
-            label="Pending Review"
-            change="urgent"
-            isReview
+            value={dueCount}
+            label="Cards Due for Review"
+            change={dueCount > 0 ? "urgent" : "You're all caught up"}
+            to="/review"
           />
         </div>
 
@@ -178,9 +184,9 @@ function HomePage() {
   );
 }
 
-function StatCard({ icon: Icon, value, label, change, isReview }: any) {
-  return (
-    <div className="glass-panel p-4 border bg-gradient-to-br from-[#120403]/90 via-[#0d0605]/95 to-black/90 hover:border-[var(--color-crimson)]/80 border-[var(--color-border)]/40 rounded-2xl transition-all duration-500 cursor-pointer group hover:scale-[1.01] hover:shadow-[0_12px_25px_rgba(237,28,36,0.12)] relative overflow-hidden">
+function StatCard({ icon: Icon, value, label, change, to }: { icon: any; value: number; label: string; change: string; to?: string }) {
+  const content = (
+    <div className="glass-panel p-4 border bg-gradient-to-br from-[#120403]/90 via-[#0d0605]/95 to-black/90 hover:border-[var(--color-crimson)]/80 border-[var(--color-border)]/40 rounded-2xl transition-all duration-500 cursor-pointer group hover:scale-[1.01] hover:shadow-[0_12px_25px_rgba(237,28,36,0.12)] relative overflow-hidden h-full">
       {/* Laser Scanner Effect */}
       <div className="absolute inset-x-0 h-[1px] bg-[var(--color-crimson)]/20 opacity-0 group-hover:opacity-100 group-hover:animate-[scanline_2s_infinite_linear] pointer-events-none z-10" />
 
@@ -219,4 +225,10 @@ function StatCard({ icon: Icon, value, label, change, isReview }: any) {
       </div>
     </div>
   );
+
+  if (to) {
+    return <Link to={to} className="block h-full">{content}</Link>;
+  }
+
+  return content;
 }

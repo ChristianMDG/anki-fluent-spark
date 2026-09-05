@@ -35,6 +35,11 @@ export interface CardRow {
   exported: boolean;
   tags: string[] | null;
   needs_review: boolean;
+  ease_factor?: number;
+  interval_days?: number;
+  repetitions?: number;
+  due_at?: string;
+  last_reviewed_at?: string | null;
 }
 
 const SUGGESTED_TAGS = ["Interview", "Daily Life", "Tech", "Travel", "Academic"];
@@ -51,10 +56,12 @@ function speak(text: string) {
 export function VocabCard({
   card,
   compact = false,
+  layout = "grid",
   onDelete,
 }: {
   card: CardRow;
   compact?: boolean;
+  layout?: "grid" | "sidebar";
   onDelete?: () => void;
 }) {
   const [openLesson, setOpenLesson] = useState(false);
@@ -154,7 +161,11 @@ export function VocabCard({
           Falls back to an instant swap (no 3D animation) for
           prefers-reduced-motion via the motion-reduce: variants. */}
       <div
-        className={`relative h-full min-h-[440px] max-h-[560px] [perspective:1600px] ${
+        className={`relative w-full ${
+          layout === "sidebar"
+            ? "h-[440px] min-h-[360px] max-h-[500px]"
+            : "h-full min-h-[440px] max-h-[560px]"
+        } [perspective:1600px] ${
           needsReview ? "" : ""
         }`}
       >
@@ -267,7 +278,11 @@ export function VocabCard({
             </div>
 
             <div className="flex-1 flex flex-col justify-start min-h-0 relative z-[1]">
-              <div className="space-y-3.5 overflow-y-auto pr-1 max-h-[280px] custom-scrollbar">
+              <div
+                className={`space-y-3.5 overflow-y-auto pr-1 ${
+                  layout === "sidebar" ? "max-h-[320px]" : "max-h-[280px]"
+                } custom-scrollbar`}
+              >
                 {card.definition && (
                   <section className="pl-3 border-l-2 border-[color:var(--color-crimson)]/40 break-words">
                     <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">

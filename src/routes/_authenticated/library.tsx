@@ -283,7 +283,7 @@ function GeneratePage() {
               <X size={12} /> Dismiss
             </button>
           </div>
-          <VocabCard card={currentCard} onDelete={() => deleteCard(currentCard.id)} />
+          <VocabCard card={currentCard} layout="sidebar" onDelete={() => deleteCard(currentCard.id)} />
         </section>
       )}
 
