@@ -221,12 +221,13 @@ function ReviewPage() {
       </div>
 
       {/* Card Container */}
-      <div className="relative">
+      <div className="relative w-full min-w-0">
         <VocabCard
           key={currentCard.id}
           card={currentCard}
           compact={true}
-          layout="grid"
+          layout="sidebar"
+          showFullDetails={true}
           onDelete={handleCardDelete}
         />
       </div>

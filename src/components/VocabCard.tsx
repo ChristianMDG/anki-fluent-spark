@@ -57,11 +57,13 @@ export function VocabCard({
   card,
   compact = false,
   layout = "grid",
+  showFullDetails = false,
   onDelete,
 }: {
   card: CardRow;
   compact?: boolean;
   layout?: "grid" | "sidebar";
+  showFullDetails?: boolean;
   onDelete?: () => void;
 }) {
   const [openLesson, setOpenLesson] = useState(false);
@@ -156,6 +158,8 @@ export function VocabCard({
       EXPORTED
     </span>
   );
+
+  const showDetails = !compact || showFullDetails || layout === "sidebar";
 
   return (
     <>
@@ -286,7 +290,7 @@ export function VocabCard({
             <div className="flex-1 flex flex-col justify-start min-h-0 relative z-[1]">
               <div
                 className={`space-y-3.5 overflow-y-auto pr-1 ${
-                  layout === "sidebar" ? "max-h-[320px]" : "max-h-[280px]"
+                  layout === "sidebar" ? "max-h-[360px]" : "max-h-[280px]"
                 } custom-scrollbar`}
               >
                 {card.definition && (
@@ -310,7 +314,7 @@ export function VocabCard({
                   </section>
                 )}
 
-                {!compact && card.grammar && (
+                {showDetails && card.grammar && (
                   <section className="pl-3 border-l-2 border-white/10 break-words">
                     <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
                       GRAMMAR
@@ -334,7 +338,7 @@ export function VocabCard({
                   </section>
                 )}
 
-                {!compact && card.cloze && (
+                {showDetails && card.cloze && (
                   <section className="pl-3 border-l-2 border-[color:var(--color-crimson)]/20 break-words">
                     <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
                       CLOZE
@@ -395,7 +399,7 @@ export function VocabCard({
                 </div>
               </div>
 
-              {!compact && (
+              {showDetails && (
                 <div className="pt-3 mt-3 border-t border-white/5 space-y-2">
                   <div className="flex flex-wrap gap-1 max-h-[52px] overflow-y-auto pr-0.5 custom-scrollbar">
                     {tags.map((t) => (
