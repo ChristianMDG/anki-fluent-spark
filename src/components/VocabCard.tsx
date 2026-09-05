@@ -138,6 +138,10 @@ export function VocabCard({
   }
 
   const dossierNumber = card.id.replace(/-/g, "").slice(0, 6).toUpperCase();
+  const cardSize =
+    layout === "sidebar"
+      ? "w-full min-h-0 max-h-none h-[clamp(500px,125cqi,560px)]"
+      : "w-full min-h-[440px] max-h-[560px]";
 
   const statusBadge = needsReview ? (
     <span className="label-mono text-[9px] tracking-[0.15em] text-amber-300 border border-amber-500/30 rounded px-1.5 py-0.5 bg-amber-500/10 flex items-center gap-1 whitespace-nowrap">
@@ -161,11 +165,7 @@ export function VocabCard({
           Falls back to an instant swap (no 3D animation) for
           prefers-reduced-motion via the motion-reduce: variants. */}
       <div
-        className={`relative w-full ${
-          layout === "sidebar"
-            ? "h-[440px] min-h-[360px] max-h-[500px]"
-            : "h-full min-h-[440px] max-h-[560px]"
-        } [perspective:1600px] ${
+        className={`relative ${cardSize} [perspective:1600px] ${
           needsReview ? "" : ""
         }`}
       >
@@ -176,7 +176,10 @@ export function VocabCard({
         >
           {/* ---------------- FRONT ---------------- */}
           <article
+            aria-hidden={flipped}
             className={`absolute inset-0 flex flex-col glass-panel p-5 group overflow-hidden [backface-visibility:hidden] ${
+              flipped ? "pointer-events-none" : "pointer-events-auto"
+            } ${
               needsReview ? "!border-amber-500/50 shadow-[0_0_0_1px_rgba(245,158,11,0.15)]" : ""
             }`}
           >
@@ -252,7 +255,10 @@ export function VocabCard({
 
           {/* ---------------- BACK ---------------- */}
           <article
+            aria-hidden={!flipped}
             className={`absolute inset-0 flex flex-col glass-panel p-5 group overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)] ${
+              flipped ? "pointer-events-auto" : "pointer-events-none"
+            } ${
               needsReview ? "!border-amber-500/50 shadow-[0_0_0_1px_rgba(245,158,11,0.15)]" : ""
             }`}
           >
