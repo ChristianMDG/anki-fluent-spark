@@ -338,3 +338,53 @@ export const generateComprehensionCheck = createServerFn({ method: "POST" })
       return { questions: [] };
     }
   });
+
+// ---------------------------------------------------------------------------
+// Server function: searchGutendex
+// Proxies search requests to gutendex.com server-side to avoid CORS issues
+// ---------------------------------------------------------------------------
+
+export interface GutendexBook {
+  id: number;
+  title: string;
+  authors: { name: string; birth_year: number | null; death_year: number | null }[];
+  subjects: string[];
+  languages: string[];
+  download_count: number;
+  formats: Record<string, string>;
+}
+
+export interface GutendexResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: GutendexBook[];
+}
+
+export const searchGutendex = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: { query?: string; page?: number }) =>
+      z
+        .object({
+          query: z.string().max(200).optional(),
+          page: z.number().int().positive().optional(),
+        })
+        .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const params = new URLSearchParams({
+      languages: "en",
+      page: String(data.page ?? 1),
+    });
+    if (data.query?.trim()) params.set("search", data.query.trim());
+
+    const res = await fetch(`https://gutendex.com/books?${params.toString()}`, {
+      headers: { "User-Agent": "I-Speak-App/1.0 (educational, public-domain)" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) throw new Error(`Gutendex error: HTTP ${res.status}`);
+    const json = (await res.json()) as GutendexResponse;
+    return json;
+  });
+

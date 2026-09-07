@@ -8,7 +8,10 @@ import {
   fetchBookText,
   explainWordInContext,
   generateComprehensionCheck,
+  searchGutendex,
   type ComprehensionQuestion,
+  type GutendexBook,
+  type GutendexResponse,
 } from "@/lib/reading.functions";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import {
@@ -32,27 +35,6 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/reading")({
   component: ReadingPage,
 });
-
-// ---------------------------------------------------------------------------
-// Gutendex types
-// ---------------------------------------------------------------------------
-
-interface GutendexBook {
-  id: number;
-  title: string;
-  authors: { name: string; birth_year: number | null; death_year: number | null }[];
-  subjects: string[];
-  languages: string[];
-  download_count: number;
-  formats: Record<string, string>;
-}
-
-interface GutendexResponse {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: GutendexBook[];
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -87,18 +69,6 @@ function getBookAuthors(book: GutendexBook): string {
   return book.authors.map((a) => a.name).join(", ") || "Unknown Author";
 }
 
-async function searchGutendex(query: string, page = 1): Promise<GutendexResponse> {
-  const params = new URLSearchParams({
-    languages: "en",
-    page: String(page),
-  });
-  if (query.trim()) params.set("search", query.trim());
-
-  const res = await fetch(`https://gutendex.com/books?${params.toString()}`);
-  if (!res.ok) throw new Error(`Gutendex error: HTTP ${res.status}`);
-  return res.json() as Promise<GutendexResponse>;
-}
-
 // ---------------------------------------------------------------------------
 // Hook: learner profile (minimal — reads from Supabase directly)
 // ---------------------------------------------------------------------------
@@ -107,23 +77,29 @@ function useCurrentLevel(): string {
   const { data } = useQuery({
     queryKey: ["learner-profile"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return null;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: profile } = await (supabase as any)
-        .from("learner_profile")
-        .select("current_level")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      return profile as { current_level: string } | null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: profile, error } = await (supabase as any)
+          .from("learner_profile")
+          .select("current_level")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (error) return null;
+        return profile as { current_level: string } | null;
+      } catch {
+        return null;
+      }
     },
     staleTime: 30_000,
   });
   return (data as { current_level: string } | null)?.current_level ?? "B1";
 }
+
 
 // ---------------------------------------------------------------------------
 // View state
@@ -220,6 +196,7 @@ function BookCard({ book, onClick }: BookCardProps) {
 function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => void }) {
   const level = useCurrentLevel();
   const suggestFn = useServerFn(suggestBooksForLevel);
+  const searchGutendexFn = useServerFn(searchGutendex);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -240,7 +217,7 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
     };
   }, []);
 
-  // AI suggestions → resolved through Gutendex
+  // AI suggestions → resolved through Gutendex server function
   const suggestionsQuery = useQuery({
     queryKey: ["book-suggestions", level],
     queryFn: async (): Promise<GutendexBook[]> => {
@@ -251,7 +228,7 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
       const resolved = await Promise.allSettled(
         suggestions.slice(0, 8).map(async (s) => {
           const query = `${s.title} ${s.author}`;
-          const res = await searchGutendex(query, 1);
+          const res = await searchGutendexFn({ data: { query, page: 1 } });
           // Take first result that has a text URL
           const match = res.results.find((b) => getBookTextUrl(b));
           return match ?? null;
@@ -273,7 +250,7 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
     queryKey: ["gutendex-search", debouncedQuery],
     queryFn: async (): Promise<GutendexBook[]> => {
       if (!debouncedQuery.trim()) return [];
-      const res = await searchGutendex(debouncedQuery);
+      const res = await searchGutendexFn({ data: { query: debouncedQuery.trim(), page: 1 } });
       return res.results;
     },
     enabled: !!debouncedQuery.trim(),
@@ -281,6 +258,7 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
   });
 
   const isSearching = !!debouncedQuery.trim();
+
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -482,40 +460,50 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
   // Load & save progress
   async function loadProgress() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return 0;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return 0;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
-      .from("reading_progress")
-      .select("current_chunk_index")
-      .eq("user_id", user.id)
-      .eq("gutenberg_book_id", book.id)
-      .maybeSingle();
-    return (data as { current_chunk_index: number } | null)?.current_chunk_index ?? 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("reading_progress")
+        .select("current_chunk_index")
+        .eq("user_id", user.id)
+        .eq("gutenberg_book_id", book.id)
+        .maybeSingle();
+      if (error) return 0;
+      return (data as { current_chunk_index: number } | null)?.current_chunk_index ?? 0;
+    } catch {
+      return 0;
+    }
   }
 
   async function saveProgress(chunkIndex: number, total: number) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("reading_progress").upsert(
-      {
-        user_id: user.id,
-        gutenberg_book_id: book.id,
-        book_title: book.title,
-        current_chunk_index: chunkIndex,
-        total_chunks: total,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,gutenberg_book_id" },
-    );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("reading_progress").upsert(
+        {
+          user_id: user.id,
+          gutenberg_book_id: book.id,
+          book_title: book.title,
+          current_chunk_index: chunkIndex,
+          total_chunks: total,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,gutenberg_book_id" },
+      );
+    } catch {
+      // Ignore error if table does not exist yet
+    }
   }
+
 
   // Fetch book text on mount
   useEffect(() => {
