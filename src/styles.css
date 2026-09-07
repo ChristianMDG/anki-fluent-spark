@@ -327,6 +327,17 @@
     16px 0 15px -4px rgba(0, 0, 0, 0.5);
 }
 
+.flipbook-page-stack-single {
+  box-shadow:
+    0 15px 35px -5px rgba(0, 0, 0, 0.4),
+    2px 2px 0 0 #d6c8b0,
+    4px 4px 0 0 #c4b59b,
+    -2px 2px 0 0 #d6c8b0,
+    -4px 4px 0 0 #c4b59b,
+    0 0 1px 1px rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+}
+
 /* Page flip transition animations */
 @keyframes pageTurnForward {
   0% {
@@ -358,6 +369,36 @@
   }
 }
 
+@keyframes singlePageTurnNext {
+  0% {
+    transform: rotateY(0deg) scale(1);
+    box-shadow: 0 15px 35px -5px rgba(0,0,0,0.4);
+  }
+  50% {
+    transform: rotateY(-35deg) scale(0.97) translateX(-12px);
+    box-shadow: -25px 20px 40px rgba(0,0,0,0.5);
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+    box-shadow: 0 15px 35px -5px rgba(0,0,0,0.4);
+  }
+}
+
+@keyframes singlePageTurnPrev {
+  0% {
+    transform: rotateY(0deg) scale(1);
+    box-shadow: 0 15px 35px -5px rgba(0,0,0,0.4);
+  }
+  50% {
+    transform: rotateY(35deg) scale(0.97) translateX(12px);
+    box-shadow: 25px 20px 40px rgba(0,0,0,0.5);
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+    box-shadow: 0 15px 35px -5px rgba(0,0,0,0.4);
+  }
+}
+
 .animate-page-flip-next {
   animation: pageTurnForward 0.45s cubic-bezier(0.645, 0.045, 0.355, 1) forwards;
   transform-origin: left center;
@@ -368,6 +409,16 @@
   animation: pageTurnBackward 0.45s cubic-bezier(0.645, 0.045, 0.355, 1) forwards;
   transform-origin: right center;
   backface-visibility: hidden;
+}
+
+.animate-single-page-next {
+  animation: singlePageTurnNext 0.4s cubic-bezier(0.645, 0.045, 0.355, 1) forwards;
+  transform-origin: left center;
+}
+
+.animate-single-page-prev {
+  animation: singlePageTurnPrev 0.4s cubic-bezier(0.645, 0.045, 0.355, 1) forwards;
+  transform-origin: right center;
 }
 
 .font-merriweather {

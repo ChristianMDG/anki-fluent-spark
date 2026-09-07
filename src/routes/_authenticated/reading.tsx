@@ -19,6 +19,8 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   X,
   Loader2,
   Sparkles,
@@ -508,8 +510,71 @@ const FONT_OPTIONS: { id: FontKey; name: string; cssClass: string }[] = [
   { id: "merriweather", name: "Merriweather", cssClass: "font-merriweather" },
   { id: "playfair", name: "Playfair", cssClass: "font-playfair" },
   { id: "lora", name: "Lora", cssClass: "font-lora" },
-  { id: "cinzel", name: "Cinzel", cssClass: "font-cinzel" },
+          { id: "cinzel", name: "Cinzel", cssClass: "font-cinzel" },
 ];
+
+// ---------------------------------------------------------------------------
+// Text pagination helper — splits full text into ~300 word book pages
+// ---------------------------------------------------------------------------
+
+function paginateTextIntoPages(fullText: string): string[] {
+  let text = fullText;
+
+  // Strip Gutenberg legal preamble/postamble header lines if present to start directly at Chapter 1
+  const startMatch = text.match(/\*\*\*\s*START OF TH(IS|E) PROJECT GUTENBERG EBOOK[^\*]*\*\*\*/i);
+  if (startMatch && startMatch.index !== undefined) {
+    text = text.slice(startMatch.index + startMatch[0].length);
+  }
+  const endMatch = text.match(/\*\*\*\s*END OF TH(IS|E) PROJECT GUTENBERG EBOOK/i);
+  if (endMatch && endMatch.index !== undefined) {
+    text = text.slice(0, endMatch.index);
+  }
+
+  const rawParagraphs = text
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\r/g, "").replace(/\n/g, " ").trim())
+    .filter((p) => p.length > 0);
+
+  const pages: string[] = [];
+  let currentParas: string[] = [];
+  let currentWords = 0;
+  const TARGET_WORDS_PER_PAGE = 260; // Clean physical book size (~260 words per page)
+
+  for (const para of rawParagraphs) {
+    const paraWords = para.split(/\s+/).length;
+
+    // If single paragraph is longer than target page length, break into sentence blocks
+    if (paraWords > TARGET_WORDS_PER_PAGE) {
+      const sentences = para.match(/[^.!?]+[.!?]+(\s+|$)/g) || [para];
+      for (const sentence of sentences) {
+        const sentenceWords = sentence.split(/\s+/).length;
+        if (currentWords + sentenceWords > TARGET_WORDS_PER_PAGE && currentWords >= 120) {
+          pages.push(currentParas.join("\n\n"));
+          currentParas = [sentence.trim()];
+          currentWords = sentenceWords;
+        } else {
+          currentParas.push(sentence.trim());
+          currentWords += sentenceWords;
+        }
+      }
+    } else {
+      if (currentWords + paraWords > TARGET_WORDS_PER_PAGE && currentWords >= 120) {
+        pages.push(currentParas.join("\n\n"));
+        currentParas = [para];
+        currentWords = paraWords;
+      } else {
+        currentParas.push(para);
+        currentWords += paraWords;
+      }
+    }
+  }
+
+  if (currentParas.length > 0) {
+    pages.push(currentParas.join("\n\n"));
+  }
+
+  return pages.filter((p) => p.trim().length > 0);
+}
 
 function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }) {
   const level = useCurrentLevel();
@@ -519,9 +584,8 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const comprehensionFn = useServerFn(generateComprehensionCheck);
   const generateCardFn = useServerFn(generateVocabCard);
 
-  const [chunks, setChunks] = useState<string[]>([]);
-  const [currentChunk, setCurrentChunk] = useState(0);
-  const [totalChunks, setTotalChunks] = useState(0);
+  const [pages, setPages] = useState<string[]>([]);
+  const [pageIndex, setPageIndex] = useState<number>(0);
   const [loadingText, setLoadingText] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -532,6 +596,17 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const [twoPageMode, setTwoPageMode] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isFlipping, setIsFlipping] = useState<"next" | "prev" | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  // Responsive window resize listener
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  const effectiveTwoPageMode = twoPageMode && !isMobile;
 
   // Word explain popover
   const [popover, setPopover] = useState<PopoverState | null>(null);
@@ -546,6 +621,8 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const readerRef = useRef<HTMLDivElement>(null);
   const authors = getBookAuthors(book);
   const textUrl = getBookTextUrl(book);
+
+  const totalPages = pages.length;
 
   // Load & save progress
   async function loadProgress() {
@@ -569,7 +646,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     }
   }
 
-  async function saveProgress(chunkIndex: number, total: number) {
+  async function saveProgress(idx: number, total: number) {
     try {
       const {
         data: { user },
@@ -582,7 +659,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           user_id: user.id,
           gutenberg_book_id: book.id,
           book_title: book.title,
-          current_chunk_index: chunkIndex,
+          current_chunk_index: idx,
           total_chunks: total,
           updated_at: new Date().toISOString(),
         },
@@ -593,7 +670,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     }
   }
 
-  // Fetch book text on mount
+  // Fetch book text on mount & paginate
   useEffect(() => {
     if (!textUrl) {
       setLoadError("No readable text file found for this book.");
@@ -610,10 +687,12 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         const result = await fetchTextFn({ data: { bookId: book.id, textUrl } });
         if (cancelled) return;
 
-        const savedChunk = await loadProgress();
-        setChunks(result.chunks);
-        setTotalChunks(result.totalChunks);
-        setCurrentChunk(Math.min(savedChunk, result.totalChunks - 1));
+        const fullText = result.chunks.join("\n\n");
+        const bookPages = paginateTextIntoPages(fullText);
+        setPages(bookPages);
+
+        const savedIdx = await loadProgress();
+        setPageIndex(Math.min(savedIdx, Math.max(0, bookPages.length - 1)));
       } catch (e) {
         if (!cancelled) setLoadError((e as Error).message);
       } finally {
@@ -627,47 +706,59 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book.id, textUrl]);
 
-  // Scroll to top whenever chunk changes
+  // Scroll to top whenever page changes
   useEffect(() => {
     readerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [currentChunk]);
+  }, [pageIndex]);
 
-  function goToChunk(index: number) {
-    const clamped = Math.max(0, Math.min(index, totalChunks - 1));
-    setCurrentChunk(clamped);
-    void saveProgress(clamped, totalChunks);
+  function goToPage(index: number) {
+    const clamped = Math.max(0, Math.min(index, Math.max(0, totalPages - 1)));
+    setPageIndex(clamped);
+    void saveProgress(clamped, totalPages);
     setShowCheck(false);
     setCheckAnswered(false);
     setCheckQuestions([]);
     setPopover(null);
   }
 
-  function handleNextChunk() {
-    if (currentChunk < totalChunks - 1) {
-      if (!showCheck && !checkAnswered) {
+  // Calculations for two-page spread vs single page
+  const leftPageIndex = effectiveTwoPageMode ? Math.floor(pageIndex / 2) * 2 : pageIndex;
+  const rightPageIndex = leftPageIndex + 1;
+  const hasNextPage = effectiveTwoPageMode
+    ? rightPageIndex < totalPages - 1 || leftPageIndex < totalPages - 1
+    : pageIndex < totalPages - 1;
+  const hasPrevPage = effectiveTwoPageMode ? leftPageIndex > 0 : pageIndex > 0;
+
+  function handleNextPage() {
+    if (hasNextPage) {
+      if (!showCheck && !checkAnswered && (pageIndex + 1) % 10 === 0) {
         void triggerComprehensionCheck();
         return;
       }
-      goToChunk(currentChunk + 1);
+      const step = effectiveTwoPageMode ? 2 : 1;
+      goToPage(pageIndex + step);
     }
   }
 
-  function handlePrevChunk() {
-    goToChunk(currentChunk - 1);
+  function handlePrevPage() {
+    if (hasPrevPage) {
+      const step = effectiveTwoPageMode ? 2 : 1;
+      goToPage(Math.max(0, pageIndex - step));
+    }
   }
 
   function triggerPageTurn(dir: "next" | "prev") {
     if (isFlipping) return;
-    if (dir === "next" && currentChunk < totalChunks - 1) {
+    if (dir === "next" && hasNextPage) {
       setIsFlipping("next");
       setTimeout(() => {
-        handleNextChunk();
+        handleNextPage();
         setIsFlipping(null);
       }, 400);
-    } else if (dir === "prev" && currentChunk > 0) {
+    } else if (dir === "prev" && hasPrevPage) {
       setIsFlipping("prev");
       setTimeout(() => {
-        handlePrevChunk();
+        handlePrevPage();
         setIsFlipping(null);
       }, 400);
     }
@@ -689,7 +780,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentChunk, totalChunks, showCheck, popover, isFlipping]);
+  }, [pageIndex, totalPages, showCheck, popover, isFlipping, twoPageMode]);
 
   async function triggerComprehensionCheck() {
     if (checkLoading) return;
@@ -697,9 +788,9 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     setCheckLoading(true);
     setCheckQuestions([]);
     try {
-      const chunk = chunks[currentChunk] ?? "";
+      const currentPageText = pages[pageIndex] ?? "";
       const result = await comprehensionFn({
-        data: { chunkText: chunk.slice(0, 3000), level },
+        data: { chunkText: currentPageText.slice(0, 3000), level },
       });
       setCheckQuestions(result.questions);
     } catch {
@@ -715,9 +806,9 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     const cleanWord = word.replace(/[^a-zA-Z'-]/g, "").toLowerCase();
     if (!cleanWord) return;
 
-    const chunk = chunks[currentChunk] ?? "";
-    const sentences = chunk.split(/[.!?]+/);
-    const sentence = sentences.find((s) => s.toLowerCase().includes(cleanWord)) ?? chunk.slice(0, 200);
+    const pageText = pages[pageIndex] ?? "";
+    const sentences = pageText.split(/[.!?]+/);
+    const sentence = sentences.find((s) => s.toLowerCase().includes(cleanWord)) ?? pageText.slice(0, 200);
 
     const rect = (e.target as HTMLElement).getBoundingClientRect();
 
@@ -801,12 +892,14 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const currentTheme = PAPER_THEMES[themeKey];
   const currentFont = FONT_OPTIONS.find((f) => f.id === fontKey) ?? FONT_OPTIONS[0];
 
-  const currentText = chunks[currentChunk] ?? "";
-  const paragraphs = currentText.split(/\n\n+/).filter((p) => p.trim().length > 0);
+  // Content for left & right pages
+  const leftText = pages[leftPageIndex] ?? "";
+  const rightText = twoPageMode && rightPageIndex < totalPages ? (pages[rightPageIndex] ?? "") : "";
 
-  const midIndex = Math.ceil(paragraphs.length / 2);
-  const leftParagraphs = twoPageMode ? paragraphs.slice(0, midIndex) : paragraphs;
-  const rightParagraphs = twoPageMode ? paragraphs.slice(midIndex) : [];
+  const leftParagraphs = leftText.split(/\n\n+/).filter((p) => p.trim().length > 0);
+  const rightParagraphs = rightText.split(/\n\n+/).filter((p) => p.trim().length > 0);
+
+  const displayProgressPage = effectiveTwoPageMode ? leftPageIndex + 1 : pageIndex + 1;
 
   return (
     <div
@@ -891,7 +984,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             className={`p-1.5 rounded-lg transition hidden md:flex ${
               twoPageMode ? "bg-white/20 text-white" : "text-neutral-400 hover:text-white"
             }`}
-            title={twoPageMode ? "Switch to single page" : "Switch to 2-page open book spread"}
+            title={twoPageMode ? "Switch to single page view" : "Switch to 2-page open book spread"}
           >
             {twoPageMode ? <Columns size={16} /> : <Square size={16} />}
           </button>
@@ -910,15 +1003,15 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
       {/* Progress indicator */}
       <div className="space-y-1">
         <div className="flex items-center justify-between text-xs text-neutral-400">
-          <span className="label-mono text-[10px]">READING PROGRESS</span>
+          <span className="label-mono text-[10px]">BOOK PROGRESS</span>
           <span id="reading-progress-label" className="label-mono text-[var(--color-gold)] text-[11px]">
-            Page {currentChunk + 1} of {totalChunks} ({Math.round(((currentChunk + 1) / totalChunks) * 100)}%)
+            Page {displayProgressPage} of {totalPages} ({Math.round((displayProgressPage / totalPages) * 100)}%)
           </span>
         </div>
         <div className="h-1 bg-white/10 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-[var(--color-crimson)] via-[var(--color-gold)] to-emerald-400 transition-all duration-500"
-            style={{ width: `${((currentChunk + 1) / totalChunks) * 100}%` }}
+            style={{ width: `${(displayProgressPage / totalPages) * 100}%` }}
           />
         </div>
       </div>
@@ -936,7 +1029,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
               onClick={() => {
                 setShowCheck(false);
                 setCheckAnswered(true);
-                goToChunk(currentChunk + 1);
+                goToPage(pageIndex + 1);
               }}
               className="text-xs text-neutral-400 hover:text-white transition-colors"
             >
@@ -947,7 +1040,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           {checkLoading && (
             <div className="flex items-center gap-2 text-sm text-neutral-400 py-4">
               <Loader2 size={16} className="animate-spin" />
-              Generating comprehension questions for this section…
+              Generating comprehension questions for page {displayProgressPage}…
             </div>
           )}
 
@@ -965,7 +1058,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 onClick={() => {
                   setShowCheck(false);
                   setCheckAnswered(true);
-                  goToChunk(currentChunk + 1);
+                  goToPage(pageIndex + 1);
                 }}
                 className="btn-crimson rounded-xl px-4 py-2.5 text-sm w-full mt-2 font-medium"
               >
@@ -999,7 +1092,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           <div
             ref={readerRef}
             className={`relative rounded-xl overflow-hidden shadow-2xl transition-all duration-300 ${
-              twoPageMode ? "grid grid-cols-1 md:grid-cols-2" : "block max-w-2xl mx-auto"
+              effectiveTwoPageMode ? "grid grid-cols-2" : "block max-w-2xl mx-auto"
             }`}
             style={{
               backgroundColor: currentTheme.bg,
@@ -1007,13 +1100,27 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
               border: `1px solid ${currentTheme.border}`,
             }}
           >
-            {/* LEFT PAGE */}
+            {/* SINGLE PAGE OR LEFT PAGE OF SPREAD */}
             <div
-              className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between min-h-[560px] relative flipbook-page-stack-left ${
-                isFlipping === "prev" ? "animate-page-flip-prev" : ""
+              className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between min-h-[580px] relative ${
+                effectiveTwoPageMode
+                  ? "flipbook-page-stack-left"
+                  : "flipbook-page-stack-single"
+              } ${
+                effectiveTwoPageMode
+                  ? isFlipping === "prev"
+                    ? "animate-page-flip-prev"
+                    : ""
+                  : isFlipping === "next"
+                    ? "animate-single-page-next"
+                    : isFlipping === "prev"
+                      ? "animate-single-page-prev"
+                      : ""
               }`}
               style={{
-                boxShadow: `inset -18px 0 32px ${currentTheme.spine}`,
+                boxShadow: effectiveTwoPageMode
+                  ? `inset -18px 0 32px ${currentTheme.spine}`
+                  : `inset 0 0 25px ${currentTheme.spine}`,
               }}
             >
               {/* Running Header */}
@@ -1024,7 +1131,9 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <span className={`uppercase tracking-widest ${currentFont.cssClass} font-semibold truncate max-w-[220px]`}>
                   {book.title}
                 </span>
-                <span className="font-mono text-[9px] opacity-40">CHAPTER {currentChunk + 1}</span>
+                <span className="font-mono text-[9px] opacity-40 uppercase">
+                  {effectiveTwoPageMode ? "Page " + (leftPageIndex + 1) : authors}
+                </span>
               </div>
 
               {/* Page Body */}
@@ -1042,6 +1151,12 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                     {renderClickableText(para.trim())}
                   </p>
                 ))}
+
+                {!effectiveTwoPageMode && pageIndex === totalPages - 1 && (
+                  <p className="italic text-center opacity-40 text-xs mt-16 font-serif">
+                    — End of Book —
+                  </p>
+                )}
               </div>
 
               {/* Running Footer */}
@@ -1052,40 +1167,60 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <button
                   id="reading-prev-btn"
                   onClick={() => triggerPageTurn("prev")}
-                  disabled={currentChunk === 0}
+                  disabled={!hasPrevPage}
                   className="hover:opacity-100 opacity-60 flex items-center gap-1 transition disabled:opacity-20 font-medium"
                 >
                   <ChevronLeft size={14} /> Previous
                 </button>
 
-                <span className={`${currentFont.cssClass} text-xs tracking-wider opacity-80`}>
-                  — {currentChunk * (twoPageMode ? 2 : 1) + 1} —
+                <span className={`${currentFont.cssClass} text-xs tracking-wider opacity-80 font-serif font-semibold`}>
+                  — {leftPageIndex + 1} —
                 </span>
 
-                <span className="text-[10px] opacity-40 font-mono">
-                  {Math.round(((currentChunk + 1) / totalChunks) * 100)}%
-                </span>
+                {/* In single page mode show Next button here */}
+                {!effectiveTwoPageMode ? (
+                  <button
+                    id="reading-next-btn"
+                    onClick={() => triggerPageTurn("next")}
+                    disabled={!hasNextPage}
+                    className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20"
+                  >
+                    Next <ChevronRight size={14} />
+                  </button>
+                ) : (
+                  <span className="text-[10px] opacity-40 font-mono">
+                    {Math.round(((leftPageIndex + 1) / totalPages) * 100)}%
+                  </span>
+                )}
               </div>
 
               {/* Page Curl Hover Visual */}
-              {currentChunk > 0 && (
+              {hasPrevPage && (
                 <div
                   onClick={() => triggerPageTurn("prev")}
                   className="flipbook-curl-corner-left cursor-pointer hover:scale-125"
                   title="Turn to previous page"
                 />
               )}
+
+              {!effectiveTwoPageMode && hasNextPage && (
+                <div
+                  onClick={() => triggerPageTurn("next")}
+                  className="flipbook-curl-corner-right cursor-pointer hover:scale-125"
+                  title="Turn to next page"
+                />
+              )}
             </div>
 
             {/* Center Spine Crease (in 2-page mode) */}
-            {twoPageMode && (
+            {effectiveTwoPageMode && (
               <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-10 flipbook-center-gutter z-10 pointer-events-none hidden md:block" />
             )}
 
             {/* RIGHT PAGE (in 2-page mode) */}
-            {twoPageMode && (
+            {effectiveTwoPageMode && (
               <div
-                className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between min-h-[560px] relative flipbook-page-stack-right ${
+                className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between min-h-[580px] relative flipbook-page-stack-right ${
                   isFlipping === "next" ? "animate-page-flip-next" : ""
                 }`}
                 style={{
@@ -1097,7 +1232,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   className="flex items-center justify-between border-b pb-2 mb-6 text-[11px]"
                   style={{ borderColor: currentTheme.border, color: currentTheme.subtext }}
                 >
-                  <span className="font-mono text-[9px] opacity-40">PUBLIC DOMAIN</span>
+                  <span className="font-mono text-[9px] opacity-40 uppercase">Page {rightPageIndex + 1}</span>
                   <span className={`uppercase tracking-widest ${currentFont.cssClass} truncate max-w-[220px] font-semibold`}>
                     {authors}
                   </span>
@@ -1126,7 +1261,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
                   {rightParagraphs.length === 0 && leftParagraphs.length > 0 && (
                     <p className="italic text-center opacity-40 text-xs mt-16 font-serif">
-                      — End of Page Section —
+                      — End of Book —
                     </p>
                   )}
                 </div>
@@ -1137,17 +1272,17 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   style={{ borderColor: currentTheme.border, color: currentTheme.subtext }}
                 >
                   <span className="text-[10px] opacity-40 font-mono">
-                    {currentChunk + 1} / {totalChunks}
+                    {rightPageIndex < totalPages ? rightPageIndex + 1 : totalPages} / {totalPages}
                   </span>
 
-                  <span className={`${currentFont.cssClass} text-xs tracking-wider opacity-80`}>
-                    — {currentChunk * 2 + 2} —
+                  <span className={`${currentFont.cssClass} text-xs tracking-wider opacity-80 font-serif font-semibold`}>
+                    — {rightPageIndex + 1} —
                   </span>
 
                   <button
                     id="reading-next-btn"
                     onClick={() => triggerPageTurn("next")}
-                    disabled={currentChunk >= totalChunks - 1}
+                    disabled={!hasNextPage}
                     className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20"
                   >
                     Next <ChevronRight size={14} />
@@ -1155,7 +1290,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 </div>
 
                 {/* Page Curl Hover Visual */}
-                {currentChunk < totalChunks - 1 && (
+                {hasNextPage && (
                   <div
                     onClick={() => triggerPageTurn("next")}
                     className="flipbook-curl-corner-right cursor-pointer hover:scale-125"
@@ -1164,6 +1299,56 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bottom Page Scrub Controller */}
+      {!showCheck && (
+        <div className="bg-black/60 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 flex items-center gap-3 text-xs max-w-2xl mx-auto flex-wrap">
+          <button
+            onClick={() => goToPage(Math.max(0, pageIndex - 10))}
+            disabled={pageIndex <= 0}
+            className="text-neutral-400 hover:text-white disabled:opacity-30 p-1 flex items-center gap-0.5 transition"
+            title="Jump back 10 pages"
+          >
+            <ChevronsLeft size={16} /> -10
+          </button>
+
+          <input
+            type="range"
+            min={0}
+            max={Math.max(0, totalPages - 1)}
+            value={pageIndex}
+            onChange={(e) => goToPage(Number(e.target.value))}
+            className="flex-1 accent-[var(--color-crimson)] h-1.5 bg-white/10 rounded-lg cursor-pointer"
+          />
+
+          <button
+            onClick={() => goToPage(Math.min(totalPages - 1, pageIndex + 10))}
+            disabled={pageIndex >= totalPages - 1}
+            className="text-neutral-400 hover:text-white disabled:opacity-30 p-1 flex items-center gap-0.5 transition"
+            title="Jump forward 10 pages"
+          >
+            +10 <ChevronsRight size={16} />
+          </button>
+
+          <div className="flex items-center gap-1 text-[11px] text-neutral-300 pl-2 border-l border-white/10">
+            <span>Page</span>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={pageIndex + 1}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (val >= 1 && val <= totalPages) {
+                  goToPage(val - 1);
+                }
+              }}
+              className="w-12 bg-white/10 border border-white/15 rounded px-1.5 py-0.5 text-center text-white outline-none"
+            />
+            <span className="text-neutral-400">/ {totalPages}</span>
           </div>
         </div>
       )}
@@ -1184,7 +1369,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     </div>
   );
 }
-
 
 // ---------------------------------------------------------------------------
 // Comprehension quiz item (reuses same visual pattern as FullLessonModal)
