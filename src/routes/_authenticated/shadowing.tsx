@@ -335,6 +335,8 @@ function ShadowingPage() {
         </div>
       )}
 
+      <SourceLibrary />
+
       {/* Main Responsive Grid Workspace */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 min-h-0 min-w-0">
         {/* LEFT COMPONENT: Immersive Player Suite & Horizontal Feed */}
