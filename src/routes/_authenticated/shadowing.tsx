@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
+import { SourceLibrary } from "@/components/SourceLibrary";
 import { VocabPreviewModal } from "@/components/VocabPreviewModal";
 import { FullLessonModal } from "@/components/FullLessonModal";
 import type { CardRow } from "@/components/VocabCard";
@@ -334,6 +335,8 @@ function ShadowingPage() {
           </button>
         </div>
       )}
+
+      <SourceLibrary />
 
       {/* Main Responsive Grid Workspace */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 min-h-0 min-w-0">

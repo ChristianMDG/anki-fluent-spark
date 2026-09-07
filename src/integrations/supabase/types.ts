@@ -16,7 +16,7 @@ export type Database = {
     Tables: {
       cards: {
         Row: {
-          card_state: "new" | "learning" | "review" | "relearning"
+          card_state: string
           cloze: string | null
           created_at: string
           definition: string | null
@@ -44,7 +44,7 @@ export type Database = {
           word: string
         }
         Insert: {
-          card_state?: "new" | "learning" | "review" | "relearning"
+          card_state?: string
           cloze?: string | null
           created_at?: string
           definition?: string | null
@@ -72,7 +72,7 @@ export type Database = {
           word: string
         }
         Update: {
-          card_state?: "new" | "learning" | "review" | "relearning"
+          card_state?: string
           cloze?: string | null
           created_at?: string
           definition?: string | null
@@ -98,6 +98,36 @@ export type Database = {
           tags?: string[]
           user_id?: string
           word?: string
+        }
+        Relationships: []
+      }
+      content_sources: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          platform: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          platform?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          platform?: string
+          url?: string
+          user_id?: string
         }
         Relationships: []
       }
