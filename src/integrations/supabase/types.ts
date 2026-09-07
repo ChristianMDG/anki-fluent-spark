@@ -16,25 +16,18 @@ export type Database = {
     Tables: {
       cards: {
         Row: {
-          card_state: "new" | "learning" | "review" | "relearning"
           cloze: string | null
           created_at: string
           definition: string | null
-          due_at: string
-          ease_factor: number
           examples: string | null
           exported: boolean
           french: string | null
           grammar: string | null
           id: string
-          interval_days: number
           ipa: string | null
-          last_reviewed_at: string | null
-          learning_step: number
           level: string | null
           needs_review: boolean
           pos: string | null
-          repetitions: number
           speaking_a1: string | null
           speaking_a2: string | null
           speaking_q1: string | null
@@ -44,25 +37,18 @@ export type Database = {
           word: string
         }
         Insert: {
-          card_state?: "new" | "learning" | "review" | "relearning"
           cloze?: string | null
           created_at?: string
           definition?: string | null
-          due_at?: string
-          ease_factor?: number
           examples?: string | null
           exported?: boolean
           french?: string | null
           grammar?: string | null
           id?: string
-          interval_days?: number
           ipa?: string | null
-          last_reviewed_at?: string | null
-          learning_step?: number
           level?: string | null
           needs_review?: boolean
           pos?: string | null
-          repetitions?: number
           speaking_a1?: string | null
           speaking_a2?: string | null
           speaking_q1?: string | null
@@ -72,25 +58,18 @@ export type Database = {
           word: string
         }
         Update: {
-          card_state?: "new" | "learning" | "review" | "relearning"
           cloze?: string | null
           created_at?: string
           definition?: string | null
-          due_at?: string
-          ease_factor?: number
           examples?: string | null
           exported?: boolean
           french?: string | null
           grammar?: string | null
           id?: string
-          interval_days?: number
           ipa?: string | null
-          last_reviewed_at?: string | null
-          learning_step?: number
           level?: string | null
           needs_review?: boolean
           pos?: string | null
-          repetitions?: number
           speaking_a1?: string | null
           speaking_a2?: string | null
           speaking_q1?: string | null
