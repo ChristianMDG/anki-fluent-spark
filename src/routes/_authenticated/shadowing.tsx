@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
+import { SourceLibrary } from "@/components/SourceLibrary";
 import { VocabPreviewModal } from "@/components/VocabPreviewModal";
 import { FullLessonModal } from "@/components/FullLessonModal";
 import type { CardRow } from "@/components/VocabCard";
