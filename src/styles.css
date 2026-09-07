@@ -1,6 +1,8 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Lora:ital,wght@0,400;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&family=Playfair+Display:ital,wght@0,500;0,700;1,400&display=swap');
+
 
 @custom-variant dark (&:is(.dark *));
 
@@ -260,5 +262,127 @@
 .animate-flip-in { transform-origin: right center; animation: dimensionFlip 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards; }
 .animate-focus-cascade { opacity: 0; animation: sharpFocus 0.7s cubic-bezier(0.215, 0.61, 0.355, 1) var(--delay, 0s) forwards; }
 .perspective-1000 { perspective: 1200px; }
+
+/* =========================================================================
+ * REALISTIC PHYSICAL FLIPBOOK READER STYLES
+ * ========================================================================= */
+
+.flipbook-stage {
+  perspective: 1800px;
+  perspective-origin: 50% 50%;
+}
+
+.flipbook-cover-frame {
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 0 30px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  position: relative;
+  transition: all 0.4s ease;
+}
+
+.flipbook-spine-shadow {
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.35) 0%,
+    rgba(0, 0, 0, 0.15) 3%,
+    rgba(0, 0, 0, 0.02) 15%,
+    rgba(0, 0, 0, 0.18) 50%,
+    rgba(0, 0, 0, 0.02) 85%,
+    rgba(0, 0, 0, 0.15) 97%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+  pointer-events: none;
+}
+
+.flipbook-center-gutter {
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.25) 0%,
+    rgba(0, 0, 0, 0.45) 48%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(0, 0, 0, 0.45) 52%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+  pointer-events: none;
+}
+
+/* Page edge stacked effect */
+.flipbook-page-stack-left {
+  box-shadow:
+    -4px 0 0 -1px #d6c8b0,
+    -8px 0 0 -2px #c4b59b,
+    -12px 0 0 -3px #b2a389,
+    -16px 0 15px -4px rgba(0, 0, 0, 0.5);
+}
+
+.flipbook-page-stack-right {
+  box-shadow:
+    4px 0 0 -1px #d6c8b0,
+    8px 0 0 -2px #c4b59b,
+    12px 0 0 -3px #b2a389,
+    16px 0 15px -4px rgba(0, 0, 0, 0.5);
+}
+
+/* Page flip transition animations */
+@keyframes pageTurnForward {
+  0% {
+    transform: rotateY(0deg);
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+  50% {
+    transform: rotateY(-90deg);
+    box-shadow: -20px 10px 30px rgba(0,0,0,0.4);
+  }
+  100% {
+    transform: rotateY(-180deg);
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+}
+
+@keyframes pageTurnBackward {
+  0% {
+    transform: rotateY(0deg);
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+  50% {
+    transform: rotateY(90deg);
+    box-shadow: 20px 10px 30px rgba(0,0,0,0.4);
+  }
+  100% {
+    transform: rotateY(180deg);
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+}
+
+.animate-page-flip-next {
+  animation: pageTurnForward 0.45s cubic-bezier(0.645, 0.045, 0.355, 1) forwards;
+  transform-origin: left center;
+  backface-visibility: hidden;
+}
+
+.animate-page-flip-prev {
+  animation: pageTurnBackward 0.45s cubic-bezier(0.645, 0.045, 0.355, 1) forwards;
+  transform-origin: right center;
+  backface-visibility: hidden;
+}
+
+.font-merriweather {
+  font-family: 'Merriweather', 'Georgia', serif;
+}
+
+.font-playfair {
+  font-family: 'Playfair Display', 'Georgia', serif;
+}
+
+.font-lora {
+  font-family: 'Lora', 'Georgia', serif;
+}
+
+.font-cinzel {
+  font-family: 'Cinzel', 'Georgia', serif;
+}
+
 
 

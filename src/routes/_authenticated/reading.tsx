@@ -25,8 +25,16 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
+  Maximize2,
+  Minimize2,
+  Type,
+  Palette,
+  Columns,
+  Square,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
+
 
 // ---------------------------------------------------------------------------
 // Route
@@ -420,6 +428,89 @@ interface PopoverState {
   cardAdded: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Paper themes & typography options
+// ---------------------------------------------------------------------------
+
+type PaperThemeKey = "sepia" | "linen" | "dark" | "amber";
+type FontKey = "merriweather" | "playfair" | "lora" | "cinzel";
+
+interface PaperThemeConfig {
+  id: PaperThemeKey;
+  name: string;
+  icon: string;
+  bg: string;
+  text: string;
+  subtext: string;
+  border: string;
+  stack: string;
+  spine: string;
+  accent: string;
+  cover: string;
+}
+
+const PAPER_THEMES: Record<PaperThemeKey, PaperThemeConfig> = {
+  sepia: {
+    id: "sepia",
+    name: "Classic Sepia",
+    icon: "📜",
+    bg: "#faf4e8",
+    text: "#2b2219",
+    subtext: "#7d7061",
+    border: "#e8dac5",
+    stack: "#decbb2",
+    spine: "rgba(0,0,0,0.12)",
+    accent: "#b8860b",
+    cover: "#2c1a12",
+  },
+  linen: {
+    id: "linen",
+    name: "Cream Linen",
+    icon: "📄",
+    bg: "#f8f6f0",
+    text: "#1c1c1c",
+    subtext: "#6e6e6e",
+    border: "#e2ddd4",
+    stack: "#d8d1c5",
+    spine: "rgba(0,0,0,0.10)",
+    accent: "#8b0000",
+    cover: "#1b2120",
+  },
+  dark: {
+    id: "dark",
+    name: "Velvet Night",
+    icon: "🌙",
+    bg: "#16151a",
+    text: "#e6e2da",
+    subtext: "#868094",
+    border: "#2e2938",
+    stack: "#24202e",
+    spine: "rgba(0,0,0,0.40)",
+    accent: "#ffd479",
+    cover: "#0d0c10",
+  },
+  amber: {
+    id: "amber",
+    name: "Warm Amber",
+    icon: "🏺",
+    bg: "#f3e9db",
+    text: "#2c2017",
+    subtext: "#7a6758",
+    border: "#dfceb6",
+    stack: "#d4c0a5",
+    spine: "rgba(0,0,0,0.15)",
+    accent: "#9b3b19",
+    cover: "#351e14",
+  },
+};
+
+const FONT_OPTIONS: { id: FontKey; name: string; cssClass: string }[] = [
+  { id: "merriweather", name: "Merriweather", cssClass: "font-merriweather" },
+  { id: "playfair", name: "Playfair", cssClass: "font-playfair" },
+  { id: "lora", name: "Lora", cssClass: "font-lora" },
+  { id: "cinzel", name: "Cinzel", cssClass: "font-cinzel" },
+];
+
 function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }) {
   const level = useCurrentLevel();
   const qc = useQueryClient();
@@ -433,6 +524,14 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const [totalChunks, setTotalChunks] = useState(0);
   const [loadingText, setLoadingText] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Reader customization state
+  const [themeKey, setThemeKey] = useState<PaperThemeKey>("sepia");
+  const [fontKey, setFontKey] = useState<FontKey>("merriweather");
+  const [fontSize, setFontSize] = useState<number>(17);
+  const [twoPageMode, setTwoPageMode] = useState<boolean>(true);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isFlipping, setIsFlipping] = useState<"next" | "prev" | null>(null);
 
   // Word explain popover
   const [popover, setPopover] = useState<PopoverState | null>(null);
@@ -494,7 +593,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     }
   }
 
-
   // Fetch book text on mount
   useEffect(() => {
     if (!textUrl) {
@@ -546,7 +644,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
   function handleNextChunk() {
     if (currentChunk < totalChunks - 1) {
-      // Offer comprehension check before advancing
       if (!showCheck && !checkAnswered) {
         void triggerComprehensionCheck();
         return;
@@ -558,6 +655,41 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   function handlePrevChunk() {
     goToChunk(currentChunk - 1);
   }
+
+  function triggerPageTurn(dir: "next" | "prev") {
+    if (isFlipping) return;
+    if (dir === "next" && currentChunk < totalChunks - 1) {
+      setIsFlipping("next");
+      setTimeout(() => {
+        handleNextChunk();
+        setIsFlipping(null);
+      }, 400);
+    } else if (dir === "prev" && currentChunk > 0) {
+      setIsFlipping("prev");
+      setTimeout(() => {
+        handlePrevChunk();
+        setIsFlipping(null);
+      }, 400);
+    }
+  }
+
+  // Keyboard navigation
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (showCheck || popover) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "ArrowRight" || e.key === "PageDown") {
+        e.preventDefault();
+        triggerPageTurn("next");
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault();
+        triggerPageTurn("prev");
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChunk, totalChunks, showCheck, popover, isFlipping]);
 
   async function triggerComprehensionCheck() {
     if (checkLoading) return;
@@ -571,7 +703,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
       });
       setCheckQuestions(result.questions);
     } catch {
-      // If AI fails, silently skip the check
       setShowCheck(false);
     } finally {
       setCheckLoading(false);
@@ -584,14 +715,12 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     const cleanWord = word.replace(/[^a-zA-Z'-]/g, "").toLowerCase();
     if (!cleanWord) return;
 
-    // Get the sentence containing this word from current chunk
     const chunk = chunks[currentChunk] ?? "";
     const sentences = chunk.split(/[.!?]+/);
     const sentence = sentences.find((s) => s.toLowerCase().includes(cleanWord)) ?? chunk.slice(0, 200);
 
     const rect = (e.target as HTMLElement).getBoundingClientRect();
 
-    // If cached, show immediately
     const cached = explainCache.current.get(cleanWord);
     if (cached) {
       setPopover({ word: cleanWord, sentence, x: rect.left, y: rect.bottom + window.scrollY + 8, explain: cached, loading: false, cardAdded: false });
@@ -600,7 +729,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
     setPopover({ word: cleanWord, sentence, x: rect.left, y: rect.bottom + window.scrollY + 8, explain: null, loading: true, cardAdded: false });
 
-    // Fetch explanation
     explainFn({ data: { word: cleanWord, sentence: sentence.trim().slice(0, 500), level } })
       .then((result) => {
         explainCache.current.set(cleanWord, result);
@@ -617,7 +745,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
       });
   }
 
-  // Add word to vocabulary (full card generation via existing fn)
   const addCardMutation = useMutation({
     mutationFn: async (word: string) => {
       return generateCardFn({ data: { word, level } });
@@ -630,7 +757,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // Render chunk text as clickable words
   function renderClickableText(text: string) {
     return text.split(/(\s+)/).map((token, i) => {
       const isWord = /[a-zA-Z]/.test(token);
@@ -639,7 +765,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         <span
           key={i}
           onClick={(e) => handleWordClick(e, token)}
-          className="cursor-pointer hover:text-[var(--color-gold)] hover:bg-[var(--color-crimson)]/10 rounded transition-colors duration-100 select-text"
+          className="cursor-pointer hover:underline hover:bg-amber-500/20 rounded transition-colors duration-100 select-text px-0.5"
           role="button"
           tabIndex={-1}
           aria-label={`Define ${token}`}
@@ -650,12 +776,11 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     });
   }
 
-  // Loading state
   if (loadingText) {
     return (
       <div className="max-w-3xl mx-auto flex flex-col items-center justify-center gap-4 py-24">
         <Loader2 size={32} className="animate-spin text-[var(--color-crimson)]" />
-        <p className="text-muted-foreground text-sm">Loading book text from Project Gutenberg…</p>
+        <p className="text-muted-foreground text-sm">Opening classic book from Project Gutenberg…</p>
       </div>
     );
   }
@@ -673,46 +798,135 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     );
   }
 
+  const currentTheme = PAPER_THEMES[themeKey];
+  const currentFont = FONT_OPTIONS.find((f) => f.id === fontKey) ?? FONT_OPTIONS[0];
+
   const currentText = chunks[currentChunk] ?? "";
+  const paragraphs = currentText.split(/\n\n+/).filter((p) => p.trim().length > 0);
+
+  const midIndex = Math.ceil(paragraphs.length / 2);
+  const leftParagraphs = twoPageMode ? paragraphs.slice(0, midIndex) : paragraphs;
+  const rightParagraphs = twoPageMode ? paragraphs.slice(midIndex) : [];
 
   return (
-    <div className="max-w-4xl mx-auto animate-in fade-in duration-500">
-      {/* Back button + book info */}
-      <div className="flex items-start gap-4 mb-6">
+    <div
+      className={`flipbook-stage w-full transition-all duration-300 ${
+        isFullscreen
+          ? "fixed inset-0 z-[150] bg-black/90 p-4 sm:p-8 overflow-y-auto flex flex-col justify-center"
+          : "max-w-6xl mx-auto space-y-6"
+      }`}
+    >
+      {/* Top Header Control Toolbar */}
+      <div className="flex items-center justify-between gap-3 bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 text-xs flex-wrap">
+        {/* Back button */}
         <button
           id="reading-back-btn"
           onClick={onBack}
-          className="flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition-colors mt-1 shrink-0"
+          className="flex items-center gap-1.5 text-neutral-300 hover:text-white transition px-2 py-1 rounded-lg hover:bg-white/10"
         >
-          <ChevronLeft size={16} />
-          Library
+          <ChevronLeft size={16} /> <span className="hidden sm:inline">Library</span>
         </button>
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold leading-tight">{book.title}</h1>
-          <p className="text-sm text-neutral-400">{authors}</p>
+
+        {/* Title */}
+        <div className="hidden lg:block text-center truncate max-w-xs">
+          <p className="font-semibold text-white truncate">{book.title}</p>
+          <p className="text-[10px] text-neutral-400 truncate">{authors}</p>
+        </div>
+
+        {/* Theme Selector */}
+        <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl">
+          {(Object.keys(PAPER_THEMES) as PaperThemeKey[]).map((key) => (
+            <button
+              key={key}
+              onClick={() => setThemeKey(key)}
+              className={`px-2.5 py-1 rounded-lg transition-all text-xs flex items-center gap-1 ${
+                themeKey === key
+                  ? "bg-white/20 text-white font-medium shadow"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+              title={PAPER_THEMES[key].name}
+            >
+              <span>{PAPER_THEMES[key].icon}</span>
+              <span className="hidden md:inline">{PAPER_THEMES[key].name.split(" ")[1]}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Font & Size Controls */}
+        <div className="flex items-center gap-2">
+          <select
+            value={fontKey}
+            onChange={(e) => setFontKey(e.target.value as FontKey)}
+            className="bg-white/10 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs outline-none cursor-pointer"
+          >
+            {FONT_OPTIONS.map((f) => (
+              <option key={f.id} value={f.id} className="bg-neutral-900 text-white">
+                {f.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Font Size Adjuster */}
+          <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+            <button
+              onClick={() => setFontSize((s) => Math.max(14, s - 1))}
+              className="text-neutral-400 hover:text-white px-1 font-bold text-xs"
+              title="Decrease font size"
+            >
+              -
+            </button>
+            <span className="text-[11px] text-neutral-300 w-4 text-center">{fontSize}</span>
+            <button
+              onClick={() => setFontSize((s) => Math.min(24, s + 1))}
+              className="text-neutral-400 hover:text-white px-1 font-bold text-xs"
+              title="Increase font size"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Two-page vs Single-page Mode */}
+          <button
+            onClick={() => setTwoPageMode(!twoPageMode)}
+            className={`p-1.5 rounded-lg transition hidden md:flex ${
+              twoPageMode ? "bg-white/20 text-white" : "text-neutral-400 hover:text-white"
+            }`}
+            title={twoPageMode ? "Switch to single page" : "Switch to 2-page open book spread"}
+          >
+            {twoPageMode ? <Columns size={16} /> : <Square size={16} />}
+          </button>
+
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition hover:bg-white/10"
+            title="Toggle Fullscreen"
+          >
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="mb-6 space-y-1">
-        <div className="flex items-center justify-between text-xs text-neutral-500">
-          <span className="label-mono">Progress</span>
-          <span id="reading-progress-label" className="label-mono text-[var(--color-gold)]">
-            Page {currentChunk + 1} of {totalChunks}
+      {/* Progress indicator */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs text-neutral-400">
+          <span className="label-mono text-[10px]">READING PROGRESS</span>
+          <span id="reading-progress-label" className="label-mono text-[var(--color-gold)] text-[11px]">
+            Page {currentChunk + 1} of {totalChunks} ({Math.round(((currentChunk + 1) / totalChunks) * 100)}%)
           </span>
         </div>
-        <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-[var(--color-crimson)] to-[var(--color-gold)] transition-all duration-500"
+            className="h-full bg-gradient-to-r from-[var(--color-crimson)] via-[var(--color-gold)] to-emerald-400 transition-all duration-500"
             style={{ width: `${((currentChunk + 1) / totalChunks) * 100}%` }}
           />
         </div>
       </div>
 
-      {/* Comprehension check (shown before advancing to next chunk) */}
+      {/* Comprehension check modal */}
       {showCheck && (
-        <div className="mb-6 glass-panel p-6 border-[var(--color-gold)]/30 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="flex items-center justify-between">
+        <div className="glass-panel p-6 border-[var(--color-gold)]/40 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-2xl mx-auto">
+          <div className="flex items-center justify-between border-b border-white/10 pb-3">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-[var(--color-gold)]" />
               <h3 className="font-semibold text-sm">Quick Comprehension Check</h3>
@@ -724,30 +938,27 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 setCheckAnswered(true);
                 goToChunk(currentChunk + 1);
               }}
-              className="text-xs text-neutral-500 hover:text-white transition-colors"
+              className="text-xs text-neutral-400 hover:text-white transition-colors"
             >
               Skip →
             </button>
           </div>
 
           {checkLoading && (
-            <div className="flex items-center gap-2 text-sm text-neutral-400">
-              <Loader2 size={14} className="animate-spin" />
-              Generating questions…
+            <div className="flex items-center gap-2 text-sm text-neutral-400 py-4">
+              <Loader2 size={16} className="animate-spin" />
+              Generating comprehension questions for this section…
             </div>
           )}
 
           {!checkLoading && checkQuestions.length === 0 && (
-            <p className="text-sm text-muted-foreground">No questions generated. Skip to continue.</p>
+            <p className="text-sm text-muted-foreground py-2">No questions generated. Skip to continue.</p>
           )}
 
           {!checkLoading && checkQuestions.length > 0 && (
             <div className="space-y-5">
               {checkQuestions.map((q, i) => (
-                <ComprehensionQuizItem
-                  key={i}
-                  question={q}
-                />
+                <ComprehensionQuizItem key={i} question={q} />
               ))}
               <button
                 id="comprehension-continue-btn"
@@ -756,7 +967,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   setCheckAnswered(true);
                   goToChunk(currentChunk + 1);
                 }}
-                className="btn-crimson rounded-xl px-4 py-2 text-sm w-full mt-2"
+                className="btn-crimson rounded-xl px-4 py-2.5 text-sm w-full mt-2 font-medium"
               >
                 Continue to next page →
               </button>
@@ -765,82 +976,195 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         </div>
       )}
 
-      {/* Reader area */}
+      {/* Physical 3D Flipbook Cover Frame */}
       {!showCheck && (
         <div
-          ref={readerRef}
-          className="glass-panel p-6 md:p-10 mb-6"
+          className="flipbook-cover-frame rounded-2xl p-3 sm:p-5 md:p-7 transition-all duration-500 relative shadow-2xl"
           style={{
-            background: "rgba(14, 6, 4, 0.75)",
-            backdropFilter: "blur(20px)",
+            background: currentTheme.cover,
+            borderColor: "rgba(255, 255, 255, 0.12)",
           }}
         >
-          {/* Reader text */}
+          {/* Silk Bookmark Ribbon */}
           <div
-            id="reader-text-content"
-            className="prose-reader"
+            className="absolute top-0 right-14 w-4 h-24 z-30 shadow-lg rounded-b flex items-end justify-center pb-1"
             style={{
-              fontSize: "1.05rem",
-              lineHeight: "1.9",
-              fontFamily: "'Georgia', 'Times New Roman', serif",
-              color: "oklch(0.88 0.02 30)",
-              maxWidth: "72ch",
-              margin: "0 auto",
-              userSelect: "text",
+              background: `linear-gradient(to bottom, ${currentTheme.accent}, #650000)`,
             }}
           >
-            {currentText.split(/\n\n+/).map((para, i) => (
-              <p key={i} style={{ marginBottom: "1.4em" }}>
-                {renderClickableText(para.trim())}
-              </p>
-            ))}
+            <Bookmark size={10} className="text-white/80" />
           </div>
 
-          {/* Attribution */}
-          <p
-            className="text-center mt-10 pt-6 border-t border-white/5"
-            style={{ fontSize: "0.7rem", color: "oklch(0.5 0.02 30)" }}
+          {/* Open Book Spread Container */}
+          <div
+            ref={readerRef}
+            className={`relative rounded-xl overflow-hidden shadow-2xl transition-all duration-300 ${
+              twoPageMode ? "grid grid-cols-1 md:grid-cols-2" : "block max-w-2xl mx-auto"
+            }`}
+            style={{
+              backgroundColor: currentTheme.bg,
+              color: currentTheme.text,
+              border: `1px solid ${currentTheme.border}`,
+            }}
           >
-            Text provided by{" "}
-            <a
-              href={`https://www.gutenberg.org/ebooks/${book.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:opacity-80"
+            {/* LEFT PAGE */}
+            <div
+              className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between min-h-[560px] relative flipbook-page-stack-left ${
+                isFlipping === "prev" ? "animate-page-flip-prev" : ""
+              }`}
+              style={{
+                boxShadow: `inset -18px 0 32px ${currentTheme.spine}`,
+              }}
             >
-              Project Gutenberg
-            </a>{" "}
-            (gutenberg.org). This work is in the public domain.
-          </p>
-        </div>
-      )}
+              {/* Running Header */}
+              <div
+                className="flex items-center justify-between border-b pb-2 mb-6 text-[11px]"
+                style={{ borderColor: currentTheme.border, color: currentTheme.subtext }}
+              >
+                <span className={`uppercase tracking-widest ${currentFont.cssClass} font-semibold truncate max-w-[220px]`}>
+                  {book.title}
+                </span>
+                <span className="font-mono text-[9px] opacity-40">CHAPTER {currentChunk + 1}</span>
+              </div>
 
-      {/* Navigation */}
-      {!showCheck && (
-        <div className="flex items-center justify-between gap-4">
-          <button
-            id="reading-prev-btn"
-            onClick={handlePrevChunk}
-            disabled={currentChunk === 0}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--color-border)]/60 text-sm text-neutral-300 hover:text-white hover:bg-white/5 transition disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft size={16} />
-            Previous
-          </button>
+              {/* Page Body */}
+              <div
+                id="reader-text-content"
+                className={`prose-reader ${currentFont.cssClass} flex-1`}
+                style={{
+                  fontSize: `${fontSize}px`,
+                  lineHeight: "1.85",
+                  userSelect: "text",
+                }}
+              >
+                {leftParagraphs.map((para, i) => (
+                  <p key={i} style={{ marginBottom: "1.25em", textIndent: i > 0 ? "1.5em" : "0" }}>
+                    {renderClickableText(para.trim())}
+                  </p>
+                ))}
+              </div>
 
-          <span className="label-mono text-[10px] text-neutral-500">
-            {currentChunk + 1} / {totalChunks}
-          </span>
+              {/* Running Footer */}
+              <div
+                className="flex items-center justify-between border-t pt-3 mt-6 text-xs"
+                style={{ borderColor: currentTheme.border, color: currentTheme.subtext }}
+              >
+                <button
+                  id="reading-prev-btn"
+                  onClick={() => triggerPageTurn("prev")}
+                  disabled={currentChunk === 0}
+                  className="hover:opacity-100 opacity-60 flex items-center gap-1 transition disabled:opacity-20 font-medium"
+                >
+                  <ChevronLeft size={14} /> Previous
+                </button>
 
-          <button
-            id="reading-next-btn"
-            onClick={handleNextChunk}
-            disabled={currentChunk >= totalChunks - 1}
-            className="btn-crimson flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Next
-            <ChevronRight size={16} />
-          </button>
+                <span className={`${currentFont.cssClass} text-xs tracking-wider opacity-80`}>
+                  — {currentChunk * (twoPageMode ? 2 : 1) + 1} —
+                </span>
+
+                <span className="text-[10px] opacity-40 font-mono">
+                  {Math.round(((currentChunk + 1) / totalChunks) * 100)}%
+                </span>
+              </div>
+
+              {/* Page Curl Hover Visual */}
+              {currentChunk > 0 && (
+                <div
+                  onClick={() => triggerPageTurn("prev")}
+                  className="flipbook-curl-corner-left cursor-pointer hover:scale-125"
+                  title="Turn to previous page"
+                />
+              )}
+            </div>
+
+            {/* Center Spine Crease (in 2-page mode) */}
+            {twoPageMode && (
+              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-10 flipbook-center-gutter z-10 pointer-events-none hidden md:block" />
+            )}
+
+            {/* RIGHT PAGE (in 2-page mode) */}
+            {twoPageMode && (
+              <div
+                className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between min-h-[560px] relative flipbook-page-stack-right ${
+                  isFlipping === "next" ? "animate-page-flip-next" : ""
+                }`}
+                style={{
+                  boxShadow: `inset 18px 0 32px ${currentTheme.spine}`,
+                }}
+              >
+                {/* Running Header */}
+                <div
+                  className="flex items-center justify-between border-b pb-2 mb-6 text-[11px]"
+                  style={{ borderColor: currentTheme.border, color: currentTheme.subtext }}
+                >
+                  <span className="font-mono text-[9px] opacity-40">PUBLIC DOMAIN</span>
+                  <span className={`uppercase tracking-widest ${currentFont.cssClass} truncate max-w-[220px] font-semibold`}>
+                    {authors}
+                  </span>
+                </div>
+
+                {/* Page Body */}
+                <div
+                  className={`prose-reader ${currentFont.cssClass} flex-1`}
+                  style={{
+                    fontSize: `${fontSize}px`,
+                    lineHeight: "1.85",
+                    userSelect: "text",
+                  }}
+                >
+                  {rightParagraphs.map((para, i) => (
+                    <p
+                      key={i}
+                      style={{
+                        marginBottom: "1.25em",
+                        textIndent: i > 0 || leftParagraphs.length > 0 ? "1.5em" : "0",
+                      }}
+                    >
+                      {renderClickableText(para.trim())}
+                    </p>
+                  ))}
+
+                  {rightParagraphs.length === 0 && leftParagraphs.length > 0 && (
+                    <p className="italic text-center opacity-40 text-xs mt-16 font-serif">
+                      — End of Page Section —
+                    </p>
+                  )}
+                </div>
+
+                {/* Running Footer */}
+                <div
+                  className="flex items-center justify-between border-t pt-3 mt-6 text-xs"
+                  style={{ borderColor: currentTheme.border, color: currentTheme.subtext }}
+                >
+                  <span className="text-[10px] opacity-40 font-mono">
+                    {currentChunk + 1} / {totalChunks}
+                  </span>
+
+                  <span className={`${currentFont.cssClass} text-xs tracking-wider opacity-80`}>
+                    — {currentChunk * 2 + 2} —
+                  </span>
+
+                  <button
+                    id="reading-next-btn"
+                    onClick={() => triggerPageTurn("next")}
+                    disabled={currentChunk >= totalChunks - 1}
+                    className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20"
+                  >
+                    Next <ChevronRight size={14} />
+                  </button>
+                </div>
+
+                {/* Page Curl Hover Visual */}
+                {currentChunk < totalChunks - 1 && (
+                  <div
+                    onClick={() => triggerPageTurn("next")}
+                    className="flipbook-curl-corner-right cursor-pointer hover:scale-125"
+                    title="Turn to next page"
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -860,6 +1184,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     </div>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Comprehension quiz item (reuses same visual pattern as FullLessonModal)
