@@ -95,38 +95,60 @@ function useLearnerProfile() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Lazy-init profile row if missing
-      await (
-        supabase.rpc as unknown as (
-          fn: string,
-          args: { _user: string },
-        ) => Promise<unknown>
-      )("ensure_learner_profile", { _user: user.id });
+      // Lazy-init profile row if missing (safely catch if RPC doesn't exist yet)
+      try {
+        await (
+          supabase.rpc as unknown as (
+            fn: string,
+            args: { _user: string },
+          ) => Promise<unknown>
+        )("ensure_learner_profile", { _user: user.id });
+      } catch {
+        // Ignore if RPC missing
+      }
 
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (col: string, val: string) => {
-              single: () => Promise<{ data: LearnerProfile | null; error: unknown }>;
+      try {
+        const { data, error } = await (supabase as unknown as {
+          from: (t: string) => {
+            select: (c: string) => {
+              eq: (col: string, val: string) => {
+                single: () => Promise<{ data: LearnerProfile | null; error: unknown }>;
+              };
             };
           };
-        };
-      })
-        .from("learner_profile")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
+        })
+          .from("learner_profile")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
 
-      if (error) throw error;
-      return (data as LearnerProfile | null) ?? {
-        id: "",
-        user_id: user.id,
-        current_level: "B1",
-        created_at: new Date().toISOString(),
-      };
+        if (error) {
+          return {
+            id: "",
+            user_id: user.id,
+            current_level: "B1",
+            created_at: new Date().toISOString(),
+          };
+        }
+
+        return (data as LearnerProfile | null) ?? {
+          id: "",
+          user_id: user.id,
+          current_level: "B1",
+          created_at: new Date().toISOString(),
+        };
+      } catch {
+        return {
+          id: "",
+          user_id: user.id,
+          current_level: "B1",
+          created_at: new Date().toISOString(),
+        };
+      }
     },
     staleTime: 30_000,
   });
+
 
   const setLevel = useCallback(
     async (level: CefrLevel) => {
@@ -165,33 +187,39 @@ function useWeakPoints() {
   const query = useQuery({
     queryKey: ["learner-weak-points"],
     queryFn: async (): Promise<LearnerWeakPoint[]> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return [];
 
-      const { data } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (col: string, val: string) => {
-              eq: (col: string, val: boolean) => {
-                order: (col: string, opts: Record<string, boolean>) => {
-                  limit: (n: number) => Promise<{ data: LearnerWeakPoint[] | null }>;
+        const { data, error } = await (supabase as unknown as {
+          from: (t: string) => {
+            select: (c: string) => {
+              eq: (col: string, val: string) => {
+                eq: (col: string, val: boolean) => {
+                  order: (col: string, opts: Record<string, boolean>) => {
+                    limit: (n: number) => Promise<{ data: LearnerWeakPoint[] | null; error: unknown }>;
+                  };
                 };
               };
             };
           };
-        };
-      })
-        .from("learner_weak_points")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("resolved", false)
-        .order("occurrences", { ascending: false })
-        .limit(10);
+        })
+          .from("learner_weak_points")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("resolved", false)
+          .order("occurrences", { ascending: false })
+          .limit(10);
 
-      return (data as LearnerWeakPoint[] | null) ?? [];
+        if (error) return [];
+        return (data as LearnerWeakPoint[] | null) ?? [];
+      } catch {
+        return [];
+      }
     },
+
     staleTime: 20_000,
   });
 

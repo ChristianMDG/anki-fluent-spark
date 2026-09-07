@@ -47,26 +47,31 @@ function useLearnerProfileReadOnly() {
   return useQuery({
     queryKey: ["learner-profile"],
     queryFn: async (): Promise<LearnerProfile | null> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return null;
 
-      const { data } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (col: string, val: string) => {
-              maybeSingle: () => Promise<{ data: LearnerProfile | null; error: unknown }>;
+        const { data, error } = await (supabase as unknown as {
+          from: (t: string) => {
+            select: (c: string) => {
+              eq: (col: string, val: string) => {
+                maybeSingle: () => Promise<{ data: LearnerProfile | null; error: unknown }>;
+              };
             };
           };
-        };
-      })
-        .from("learner_profile")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+        })
+          .from("learner_profile")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-      return (data as LearnerProfile | null) ?? null;
+        if (error) return null;
+        return (data as LearnerProfile | null) ?? null;
+      } catch {
+        return null;
+      }
     },
     staleTime: 30_000,
   });
@@ -78,35 +83,41 @@ function useWeakPointsReadOnly() {
   const query = useQuery({
     queryKey: ["learner-weak-points"],
     queryFn: async (): Promise<LearnerWeakPoint[]> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return [];
 
-      const { data } = await (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (col: string, val: string) => {
-              eq: (col: string, val: boolean) => {
-                order: (col: string, opts: Record<string, boolean>) => {
-                  limit: (n: number) => Promise<{ data: LearnerWeakPoint[] | null }>;
+        const { data, error } = await (supabase as unknown as {
+          from: (t: string) => {
+            select: (c: string) => {
+              eq: (col: string, val: string) => {
+                eq: (col: string, val: boolean) => {
+                  order: (col: string, opts: Record<string, boolean>) => {
+                    limit: (n: number) => Promise<{ data: LearnerWeakPoint[] | null; error: unknown }>;
+                  };
                 };
               };
             };
           };
-        };
-      })
-        .from("learner_weak_points")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("resolved", false)
-        .order("occurrences", { ascending: false })
-        .limit(20);
+        })
+          .from("learner_weak_points")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("resolved", false)
+          .order("occurrences", { ascending: false })
+          .limit(20);
 
-      return (data as LearnerWeakPoint[] | null) ?? [];
+        if (error) return [];
+        return (data as LearnerWeakPoint[] | null) ?? [];
+      } catch {
+        return [];
+      }
     },
     staleTime: 20_000,
   });
+
 
   const resolveWeakPoint = async (id: string) => {
     await (supabase as unknown as {
