@@ -372,6 +372,36 @@ export type Database = {
           },
         ]
       }
+      reading_progress: {
+        Row: {
+          id: string
+          user_id: string
+          gutenberg_book_id: number
+          book_title: string
+          current_chunk_index: number
+          total_chunks: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          gutenberg_book_id: number
+          book_title?: string
+          current_chunk_index?: number
+          total_chunks?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          gutenberg_book_id?: number
+          book_title?: string
+          current_chunk_index?: number
+          total_chunks?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shadowing_videos: {
         Row: {
           created_at: string
