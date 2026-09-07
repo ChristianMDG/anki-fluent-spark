@@ -80,6 +80,36 @@ export type Database = {
         }
         Relationships: []
       }
+      content_sources: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          platform: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          platform?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          platform?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_goals: {
         Row: {
           created_at: string
