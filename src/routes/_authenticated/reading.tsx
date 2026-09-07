@@ -49,21 +49,11 @@ function getBookCover(book: GutendexBook): string | null {
   return null;
 }
 
-function getBookTextUrl(book: GutendexBook): string | null {
-  // Prefer UTF-8 plain text
-  for (const key of Object.keys(book.formats)) {
-    if (key.includes("text/plain") && key.includes("utf-8")) {
-      return book.formats[key];
-    }
-  }
-  // Fallback to any plain text
-  for (const key of Object.keys(book.formats)) {
-    if (key.startsWith("text/plain")) {
-      return book.formats[key];
-    }
-  }
-  return null;
+function getBookTextUrl(book: GutendexBook): string {
+  // Always return canonical Gutenberg HTTPS text cache URL for this book ID
+  return `https://www.gutenberg.org/cache/epub/${book.id}/pg${book.id}.txt`;
 }
+
 
 function getBookAuthors(book: GutendexBook): string {
   return book.authors.map((a) => a.name).join(", ") || "Unknown Author";

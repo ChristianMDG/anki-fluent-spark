@@ -152,19 +152,49 @@ export const fetchBookText = createServerFn({ method: "POST" })
         .parse(d),
   )
   .handler(async ({ data }) => {
-    // Validate that the URL is a Project Gutenberg URL
-    const url = new URL(data.textUrl);
-    if (!url.hostname.endsWith("gutenberg.org") && !url.hostname.endsWith("gutenberg.net.au")) {
-      throw new Error("Only Project Gutenberg URLs are allowed");
+    // Try multiple candidate URLs in order to guarantee successful fetch
+    const candidateUrls = [
+      `https://www.gutenberg.org/cache/epub/${data.bookId}/pg${data.bookId}.txt`,
+      `https://www.gutenberg.org/files/${data.bookId}/${data.bookId}-0.txt`,
+      data.textUrl.replace(/^http:/, "https:"),
+      data.textUrl,
+    ];
+
+    let raw = "";
+    let lastError: Error | null = null;
+
+    for (const urlStr of candidateUrls) {
+      try {
+        const url = new URL(urlStr);
+        if (!url.hostname.endsWith("gutenberg.org") && !url.hostname.endsWith("gutenberg.net.au")) {
+          continue;
+        }
+
+        const res = await fetch(urlStr, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(20_000),
+          redirect: "follow",
+        });
+
+        if (res.ok) {
+          const text = await res.text();
+          if (text.trim().length > 100) {
+            raw = text;
+            lastError = null;
+            break;
+          }
+        }
+      } catch (err) {
+        lastError = err as Error;
+      }
     }
 
-    const res = await fetch(data.textUrl, {
-      headers: { "User-Agent": "I-Speak-App/1.0 (educational, public-domain)" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!res.ok) throw new Error(`Failed to fetch book text: HTTP ${res.status}`);
+    if (!raw) {
+      throw new Error(`Failed to fetch book text: ${lastError?.message || "HTTP 404"}`);
+    }
 
-    const raw = await res.text();
     const stripped = stripGutenbergBoilerplate(raw);
     const chunks = chunkText(stripped);
 
@@ -172,6 +202,7 @@ export const fetchBookText = createServerFn({ method: "POST" })
 
     return { chunks, totalChunks: chunks.length };
   });
+
 
 // ---------------------------------------------------------------------------
 // Server function: suggestBooksForLevel
