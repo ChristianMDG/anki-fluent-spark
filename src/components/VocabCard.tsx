@@ -150,7 +150,7 @@ export function VocabCard({
   const cardSize =
     layout === "sidebar"
       ? "w-full min-h-0 max-h-none h-[clamp(580px,145cqi,680px)]"
-      : "w-full min-h-[440px] max-h-[560px]";
+      : "w-full min-h-[520px] max-h-[600px] h-full";
 
   const statusBadge = needsReview ? (
     <span className="label-mono text-[9px] tracking-[0.15em] text-amber-300 border border-amber-500/30 rounded px-1.5 py-0.5 bg-amber-500/10 flex items-center gap-1 whitespace-nowrap">
@@ -295,9 +295,11 @@ export function VocabCard({
             </div>
 
             <div className="flex-1 flex flex-col justify-start min-h-0 relative z-[1]">
+              {/* Scroll affordance: faint fade at the bottom of the scroll area */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-[color:var(--background)]/80 to-transparent z-[2]" />
               <div
-                className={`space-y-4 overflow-y-auto pr-1 ${
-                  layout === "sidebar" ? "max-h-[440px]" : "max-h-[280px]"
+                className={`space-y-4 overflow-y-auto pr-1 min-h-0 ${
+                  layout === "sidebar" ? "max-h-[440px]" : "flex-1"
                 } custom-scrollbar`}
               >
                 {card.definition && (
@@ -333,7 +335,7 @@ export function VocabCard({
                   </section>
                 )}
 
-                {showDetails && card.grammar && (
+                {card.grammar && (
                   <section className="pl-3 border-l-2 border-white/10 break-words">
                     <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
                       GRAMMAR
@@ -345,7 +347,7 @@ export function VocabCard({
                   </section>
                 )}
 
-                {showDetails && (card.speaking_q1 || card.speaking_q2) && (
+                {(card.speaking_q1 || card.speaking_q2) && (
                   <section className="pl-3 border-l-2 border-[color:var(--color-gold)]/40 break-words">
                     <p className="label-mono mb-1 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
                       SPEAKING PRACTICE
@@ -375,7 +377,7 @@ export function VocabCard({
                   </section>
                 )}
 
-                {showDetails && card.cloze && (
+                {card.cloze && (
                   <section className="pt-4 mt-1 border-t border-white/10 break-words">
                     <div className="pl-3 border-l-2 border-[color:var(--color-crimson)]/40">
                       <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none flex items-center gap-1.5">
