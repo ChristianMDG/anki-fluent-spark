@@ -149,7 +149,7 @@ export function VocabCard({
   const dossierNumber = card.id.replace(/-/g, "").slice(0, 6).toUpperCase();
   const cardSize =
     layout === "sidebar"
-      ? "w-full min-h-0 max-h-none h-[clamp(500px,125cqi,560px)]"
+      ? "w-full min-h-0 max-h-none h-[clamp(580px,145cqi,680px)]"
       : "w-full min-h-[440px] max-h-[560px]";
 
   const statusBadge = needsReview ? (
