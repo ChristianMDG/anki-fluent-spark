@@ -32,6 +32,10 @@ export interface CardRow {
   grammar: string | null;
   examples: string | null;
   cloze: string | null;
+  speaking_q1?: string | null;
+  speaking_a1?: string | null;
+  speaking_q2?: string | null;
+  speaking_a2?: string | null;
   exported: boolean;
   tags: string[] | null;
   needs_review: boolean;
