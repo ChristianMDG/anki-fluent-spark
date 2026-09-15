@@ -296,8 +296,8 @@ export function VocabCard({
 
             <div className="flex-1 flex flex-col justify-start min-h-0 relative z-[1]">
               <div
-                className={`space-y-3.5 overflow-y-auto pr-1 ${
-                  layout === "sidebar" ? "max-h-[360px]" : "max-h-[280px]"
+                className={`space-y-4 overflow-y-auto pr-1 ${
+                  layout === "sidebar" ? "max-h-[440px]" : "max-h-[280px]"
                 } custom-scrollbar`}
               >
                 {card.definition && (
@@ -321,18 +321,6 @@ export function VocabCard({
                   </section>
                 )}
 
-                {showDetails && card.grammar && (
-                  <section className="pl-3 border-l-2 border-white/10 break-words">
-                    <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
-                      GRAMMAR
-                    </p>
-                    <div
-                      className="text-sm text-neutral-300"
-                      dangerouslySetInnerHTML={{ __html: grammarToHtml(card.grammar) }}
-                    />
-                  </section>
-                )}
-
                 {card.examples && (
                   <section className="pl-3 border-l-2 border-white/10 break-words">
                     <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
@@ -345,15 +333,59 @@ export function VocabCard({
                   </section>
                 )}
 
-                {showDetails && card.cloze && (
-                  <section className="pl-3 border-l-2 border-[color:var(--color-crimson)]/20 break-words">
+                {showDetails && card.grammar && (
+                  <section className="pl-3 border-l-2 border-white/10 break-words">
                     <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
-                      CLOZE
+                      GRAMMAR
                     </p>
                     <div
                       className="text-sm text-neutral-300"
-                      dangerouslySetInnerHTML={{ __html: clozeToHtml(card.cloze) }}
+                      dangerouslySetInnerHTML={{ __html: grammarToHtml(card.grammar) }}
                     />
+                  </section>
+                )}
+
+                {showDetails && (card.speaking_q1 || card.speaking_q2) && (
+                  <section className="pl-3 border-l-2 border-[color:var(--color-gold)]/40 break-words">
+                    <p className="label-mono mb-1 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none">
+                      SPEAKING PRACTICE
+                    </p>
+                    <div className="space-y-2.5">
+                      {card.speaking_q1 && (
+                        <div>
+                          <p className="text-sm text-neutral-200 font-medium">{card.speaking_q1}</p>
+                          {card.speaking_a1 && (
+                            <p className="text-[13px] text-neutral-400 leading-relaxed mt-0.5">
+                              {card.speaking_a1}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {card.speaking_q2 && (
+                        <div>
+                          <p className="text-sm text-neutral-200 font-medium">{card.speaking_q2}</p>
+                          {card.speaking_a2 && (
+                            <p className="text-[13px] text-neutral-400 leading-relaxed mt-0.5">
+                              {card.speaking_a2}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {showDetails && card.cloze && (
+                  <section className="pt-4 mt-1 border-t border-white/10 break-words">
+                    <div className="pl-3 border-l-2 border-[color:var(--color-crimson)]/40">
+                      <p className="label-mono mb-0.5 text-[9px] tracking-[0.15em] text-muted-foreground/60 select-none flex items-center gap-1.5">
+                        CLOZE <span className="text-[8px] text-muted-foreground/40 tracking-[0.1em]">· SELF-TEST</span>
+                      </p>
+                      <div
+                        className="text-sm text-neutral-300"
+                        dangerouslySetInnerHTML={{ __html: clozeToHtml(card.cloze) }}
+                      />
+                    </div>
                   </section>
                 )}
               </div>
