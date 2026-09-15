@@ -29,6 +29,7 @@ export type Database = {
           id: string
           interval_days: number
           ipa: string | null
+          last_grammar_drill_at: string | null
           last_reviewed_at: string | null
           learning_step: number
           level: string | null
@@ -57,6 +58,7 @@ export type Database = {
           id?: string
           interval_days?: number
           ipa?: string | null
+          last_grammar_drill_at?: string | null
           last_reviewed_at?: string | null
           learning_step?: number
           level?: string | null
@@ -85,6 +87,7 @@ export type Database = {
           id?: string
           interval_days?: number
           ipa?: string | null
+          last_grammar_drill_at?: string | null
           last_reviewed_at?: string | null
           learning_step?: number
           level?: string | null
@@ -295,6 +298,66 @@ export type Database = {
         }
         Relationships: []
       }
+      learner_profile: {
+        Row: {
+          created_at: string
+          current_level: Database["public"]["Enums"]["cefr_level"]
+          id: string
+          level_updated_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_level?: Database["public"]["Enums"]["cefr_level"]
+          id?: string
+          level_updated_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_level?: Database["public"]["Enums"]["cefr_level"]
+          id?: string
+          level_updated_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      learner_weak_points: {
+        Row: {
+          created_at: string
+          example: string
+          id: string
+          last_seen_at: string
+          occurrences: number
+          resolved: boolean
+          tag: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          example?: string
+          id?: string
+          last_seen_at?: string
+          occurrences?: number
+          resolved?: boolean
+          tag: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          example?: string
+          id?: string
+          last_seen_at?: string
+          occurrences?: number
+          resolved?: boolean
+          tag?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       lessons: {
         Row: {
           card_id: string
@@ -326,6 +389,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      reading_progress: {
+        Row: {
+          book_title: string
+          current_chunk_index: number
+          gutenberg_book_id: number
+          id: string
+          total_chunks: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          book_title: string
+          current_chunk_index?: number
+          gutenberg_book_id: number
+          id?: string
+          total_chunks?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          book_title?: string
+          current_chunk_index?: number
+          gutenberg_book_id?: number
+          id?: string
+          total_chunks?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       shadowing_notes: {
         Row: {
@@ -371,36 +464,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      reading_progress: {
-        Row: {
-          id: string
-          user_id: string
-          gutenberg_book_id: number
-          book_title: string
-          current_chunk_index: number
-          total_chunks: number
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          gutenberg_book_id: number
-          book_title?: string
-          current_chunk_index?: number
-          total_chunks?: number
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          gutenberg_book_id?: number
-          book_title?: string
-          current_chunk_index?: number
-          total_chunks?: number
-          updated_at?: string
-        }
-        Relationships: []
       }
       shadowing_videos: {
         Row: {
@@ -456,9 +519,11 @@ export type Database = {
     }
     Functions: {
       ensure_journey_cells: { Args: { _user: string }; Returns: undefined }
+      ensure_learner_profile: { Args: { _user: string }; Returns: undefined }
       recompute_journey_status: { Args: { _user: string }; Returns: undefined }
     }
     Enums: {
+      cefr_level: "A1" | "A2" | "B1" | "B2" | "C1" | "C2"
       journey_situation:
         | "social"
         | "transactional"
@@ -593,6 +658,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      cefr_level: ["A1", "A2", "B1", "B2", "C1", "C2"],
       journey_situation: [
         "social",
         "transactional",
