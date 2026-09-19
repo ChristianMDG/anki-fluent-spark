@@ -25,11 +25,6 @@ export type Database = {
           examples: string | null
           exported: boolean
           french: string | null
-          fsrs_difficulty: number | null
-          fsrs_last_review: string | null
-          fsrs_stability: number | null
-          fsrs_state: string
-          fsrs_step: number | null
           grammar: string | null
           id: string
           interval_days: number
@@ -59,11 +54,6 @@ export type Database = {
           examples?: string | null
           exported?: boolean
           french?: string | null
-          fsrs_difficulty?: number | null
-          fsrs_last_review?: string | null
-          fsrs_stability?: number | null
-          fsrs_state?: string
-          fsrs_step?: number | null
           grammar?: string | null
           id?: string
           interval_days?: number
@@ -93,11 +83,7 @@ export type Database = {
           examples?: string | null
           exported?: boolean
           french?: string | null
-          fsrs_difficulty?: number | null
-          fsrs_last_review?: string | null
-          fsrs_stability?: number | null
-          fsrs_state?: string
-          fsrs_step?: number | null
+          grammar?: string | null
           id?: string
           interval_days?: number
           ipa?: string | null
