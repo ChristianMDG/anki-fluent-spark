@@ -253,6 +253,28 @@ function ReviewPage() {
     return previewFsrsGrades(currentCardFields, now);
   }, [currentCard, currentCardFields, now]);
 
+  const queueCounts = useMemo(() => {
+    if (!queue) return { newCount: 0, learningCount: 0, reviewCount: 0 };
+    let newCount = 0;
+    let learningCount = 0;
+    let reviewCount = 0;
+
+    for (const card of queue) {
+      const state = card.fsrs_state ?? "new";
+      if (state === "new") {
+        newCount++;
+      } else if (state === "learning" || state === "relearning") {
+        learningCount++;
+      } else if (state === "review") {
+        reviewCount++;
+      } else {
+        newCount++;
+      }
+    }
+
+    return { newCount, learningCount, reviewCount };
+  }, [queue]);
+
   if (isLoading || queue === null) {
     return (
       <div className="w-full h-[60vh] flex flex-col items-center justify-center gap-3">
@@ -340,7 +362,7 @@ function ReviewPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {undoSnapshot && (
             <button
               onClick={handleUndo}
@@ -353,10 +375,35 @@ function ReviewPage() {
             </button>
           )}
 
-          <span className="font-audiowide text-[11px] text-[var(--color-gold)] bg-[var(--color-gold)]/10 border border-[var(--color-gold)]/30 rounded-lg px-2.5 py-1">
-            {completedCount > 0 ? `Done: ${completedCount} · ` : ""}
-            {sortedQueue.length} left in session
-          </span>
+          {/* Anki 3-bucket queue breakdown */}
+          <div className="flex items-center gap-1.5 font-audiowide text-[11px]">
+            {/* New Cards (Blue/Sky) */}
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-950/50 border border-sky-500/30 text-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.15)]"
+              title="New Cards"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+              <span>{queueCounts.newCount} New</span>
+            </span>
+
+            {/* Learning / Relearning Cards (Red/Crimson) */}
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-950/50 border border-red-500/30 text-red-300 shadow-[0_0_8px_rgba(239,68,68,0.15)]"
+              title="Learning & Relearning Cards"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span>{queueCounts.learningCount} Learn</span>
+            </span>
+
+            {/* Review Cards (Green/Emerald) */}
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.15)]"
+              title="Review Cards"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>{queueCounts.reviewCount} Review</span>
+            </span>
+          </div>
         </div>
       </div>
 
