@@ -34,6 +34,17 @@ import {
   Columns,
   Square,
   Bookmark,
+  BookmarkCheck,
+  Settings,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  List,
+  Sliders,
+  Sun,
+  Moon,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -451,6 +462,43 @@ interface PaperThemeConfig {
   cover: string;
 }
 
+type FontSizeStep = "S" | "M" | "L" | "XL";
+type LineSpacingOption = "compact" | "comfortable" | "spacious";
+
+const FONT_SIZE_MAP: Record<FontSizeStep, number> = {
+  S: 14,
+  M: 17,
+  L: 20,
+  XL: 23,
+};
+
+const LINE_SPACING_MAP: Record<LineSpacingOption, string> = {
+  compact: "1.5",
+  comfortable: "1.85",
+  spacious: "2.2",
+};
+
+interface ReadingBookmark {
+  id: string;
+  user_id: string;
+  gutenberg_book_id: number;
+  chunk_index: number;
+  label: string;
+  created_at: string;
+}
+
+interface TOCItem {
+  title: string;
+  pageIndex: number;
+}
+
+interface SearchResultItem {
+  pageIndex: number;
+  prefix: string;
+  matchText: string;
+  suffix: string;
+}
+
 const PAPER_THEMES: Record<PaperThemeKey, PaperThemeConfig> = {
   sepia: {
     id: "sepia",
@@ -467,29 +515,29 @@ const PAPER_THEMES: Record<PaperThemeKey, PaperThemeConfig> = {
   },
   linen: {
     id: "linen",
-    name: "Cream Linen",
-    icon: "📄",
-    bg: "#f8f6f0",
-    text: "#1c1c1c",
-    subtext: "#6e6e6e",
-    border: "#e2ddd4",
-    stack: "#d8d1c5",
-    spine: "rgba(0,0,0,0.10)",
-    accent: "#8b0000",
-    cover: "#1b2120",
+    name: "Pure Light",
+    icon: "☀️",
+    bg: "#ffffff",
+    text: "#111827",
+    subtext: "#4b5563",
+    border: "#e5e7eb",
+    stack: "#f3f4f6",
+    spine: "rgba(0,0,0,0.06)",
+    accent: "#2563eb",
+    cover: "#1f2937",
   },
   dark: {
     id: "dark",
     name: "Velvet Night",
     icon: "🌙",
-    bg: "#16151a",
-    text: "#e6e2da",
-    subtext: "#868094",
-    border: "#2e2938",
-    stack: "#24202e",
-    spine: "rgba(0,0,0,0.40)",
-    accent: "#ffd479",
-    cover: "#0d0c10",
+    bg: "#121212",
+    text: "#e5e5e5",
+    subtext: "#9ca3af",
+    border: "#262626",
+    stack: "#1a1a1a",
+    spine: "rgba(0,0,0,0.50)",
+    accent: "#fbbf24",
+    cover: "#000000",
   },
   amber: {
     id: "amber",
@@ -510,8 +558,85 @@ const FONT_OPTIONS: { id: FontKey; name: string; cssClass: string }[] = [
   { id: "merriweather", name: "Merriweather", cssClass: "font-merriweather" },
   { id: "playfair", name: "Playfair", cssClass: "font-playfair" },
   { id: "lora", name: "Lora", cssClass: "font-lora" },
-          { id: "cinzel", name: "Cinzel", cssClass: "font-cinzel" },
+  { id: "cinzel", name: "Cinzel", cssClass: "font-cinzel" },
 ];
+
+function extractTableOfContents(pages: string[]): TOCItem[] {
+  const items: TOCItem[] = [];
+  const seenTitles = new Set<string>();
+
+  const chapterRegex =
+    /^(?:chapter|act|book|part|section|canto|volume)\s+(?:[ivxlcdm\d]+|[a-z]+)(?::?\s+.*)?$/i;
+  const standaloneHeaderRegex =
+    /^(?:CHAPTER|ACT|BOOK|PART|SECTION|CANTO|PREFACE|PROLOGUE|EPILOGUE|CONTENTS|INTRODUCTION|FOREWORD)\b/i;
+  const romanNumHeaderRegex = /^[IVXLCDM]+\.\s+[A-Z]/;
+
+  for (let i = 0; i < pages.length; i++) {
+    const pageText = pages[i];
+    const lines = pageText.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+
+    for (const line of lines) {
+      if (line.length > 80) continue;
+
+      if (
+        chapterRegex.test(line) ||
+        standaloneHeaderRegex.test(line) ||
+        romanNumHeaderRegex.test(line)
+      ) {
+        const cleanTitle = line.replace(/\s+/g, " ").trim();
+        const key = cleanTitle.toLowerCase();
+        if (!seenTitles.has(key)) {
+          seenTitles.add(key);
+          items.push({ title: cleanTitle, pageIndex: i });
+        }
+        break;
+      }
+    }
+  }
+
+  return items;
+}
+
+function searchBookText(pages: string[], query: string): SearchResultItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q || q.length < 2) return [];
+
+  const results: SearchResultItem[] = [];
+  const MAX_RESULTS = 40;
+
+  for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+    const pageText = pages[pageIdx];
+    const lowerText = pageText.toLowerCase();
+    let pos = 0;
+
+    while (pos < lowerText.length) {
+      const matchIdx = lowerText.indexOf(q, pos);
+      if (matchIdx === -1) break;
+
+      const startContextPos = Math.max(0, matchIdx - 35);
+      const endContextPos = Math.min(pageText.length, matchIdx + q.length + 35);
+
+      let beforeStr = pageText.slice(startContextPos, matchIdx).replace(/\s+/g, " ");
+      const matchStr = pageText.slice(matchIdx, matchIdx + q.length);
+      let afterStr = pageText.slice(matchIdx + q.length, endContextPos).replace(/\s+/g, " ");
+
+      if (startContextPos > 0) beforeStr = "…" + beforeStr;
+      if (endContextPos < pageText.length) afterStr = afterStr + "…";
+
+      results.push({
+        pageIndex: pageIdx,
+        prefix: beforeStr,
+        matchText: matchStr,
+        suffix: afterStr,
+      });
+
+      if (results.length >= MAX_RESULTS) return results;
+      pos = matchIdx + q.length;
+    }
+  }
+
+  return results;
+}
 
 // ---------------------------------------------------------------------------
 // Text pagination helper — splits full text into ~300 word book pages
@@ -589,14 +714,40 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const [loadingText, setLoadingText] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Reader customization state
+  // Reader customization state & preferences
   const [themeKey, setThemeKey] = useState<PaperThemeKey>("sepia");
   const [fontKey, setFontKey] = useState<FontKey>("merriweather");
-  const [fontSize, setFontSize] = useState<number>(17);
+  const [fontSizeStep, setFontSizeStep] = useState<FontSizeStep>("M");
+  const [lineSpacing, setLineSpacing] = useState<LineSpacingOption>("comfortable");
+  const [readAloudRate, setReadAloudRate] = useState<number>(1.0);
   const [twoPageMode, setTwoPageMode] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isFlipping, setIsFlipping] = useState<"next" | "prev" | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  // Focus mode state
+  const [focusMode, setFocusMode] = useState<boolean>(false);
+
+  // Panels state
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [bookmarksOpen, setBookmarksOpen] = useState<boolean>(false);
+  const [tocOpen, setTocOpen] = useState<boolean>(false);
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
+
+  // Bookmarks & TOC & Search state
+  const [bookmarks, setBookmarks] = useState<ReadingBookmark[]>([]);
+  const [tocItems, setTocItems] = useState<TOCItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+
+  // Speech synthesis read-aloud state
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [isSpeakingPaused, setIsSpeakingPaused] = useState<boolean>(false);
+  const [currentSentenceIdx, setCurrentSentenceIdx] = useState<number | null>(null);
+
+  // Derived styling values
+  const fontSize = FONT_SIZE_MAP[fontSizeStep];
+  const lineHeightStr = LINE_SPACING_MAP[lineSpacing];
 
   // Responsive window resize listener
   useEffect(() => {
@@ -624,7 +775,177 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
   const totalPages = pages.length;
 
-  // Load & save progress
+  // Load preferences from Supabase
+  useEffect(() => {
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
+          .from("reading_preferences")
+          .select("font_size, line_spacing, theme, read_aloud_rate")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (data) {
+          if (data.font_size && (data.font_size as FontSizeStep) in FONT_SIZE_MAP) {
+            setFontSizeStep(data.font_size as FontSizeStep);
+          }
+          if (data.line_spacing && (data.line_spacing as LineSpacingOption) in LINE_SPACING_MAP) {
+            setLineSpacing(data.line_spacing as LineSpacingOption);
+          }
+          if (data.theme && PAPER_THEMES[data.theme as PaperThemeKey]) {
+            setThemeKey(data.theme as PaperThemeKey);
+          }
+          if (typeof data.read_aloud_rate === "number") {
+            setReadAloudRate(data.read_aloud_rate);
+          }
+        }
+      } catch {
+        // default settings stick
+      }
+    })();
+  }, []);
+
+  async function updateAndSavePreferences(updates: {
+    fontSizeStep?: FontSizeStep;
+    lineSpacing?: LineSpacingOption;
+    themeKey?: PaperThemeKey;
+    readAloudRate?: number;
+  }) {
+    if (updates.fontSizeStep) setFontSizeStep(updates.fontSizeStep);
+    if (updates.lineSpacing) setLineSpacing(updates.lineSpacing);
+    if (updates.themeKey) setThemeKey(updates.themeKey);
+    if (updates.readAloudRate) setReadAloudRate(updates.readAloudRate);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const fStep = updates.fontSizeStep ?? fontSizeStep;
+      const lSpace = updates.lineSpacing ?? lineSpacing;
+      const thKey = updates.themeKey ?? themeKey;
+      const rate = updates.readAloudRate ?? readAloudRate;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("reading_preferences").upsert(
+        {
+          user_id: user.id,
+          font_size: fStep,
+          line_spacing: lSpace,
+          theme: thKey,
+          read_aloud_rate: rate,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+    } catch {
+      // ignore persistence error
+    }
+  }
+
+  // Bookmarks handling
+  async function loadBookmarks() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("reading_bookmarks")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("gutenberg_book_id", book.id)
+        .order("created_at", { ascending: false });
+      if (!error && data) {
+        setBookmarks(data as ReadingBookmark[]);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  useEffect(() => {
+    void loadBookmarks();
+  }, [book.id]);
+
+  const isCurrentPageBookmarked = bookmarks.some((b) => b.chunk_index === pageIndex);
+
+  async function handleToggleBookmark() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const existing = bookmarks.find((b) => b.chunk_index === pageIndex);
+      if (existing) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("reading_bookmarks").delete().eq("id", existing.id);
+        setBookmarks((prev) => prev.filter((b) => b.id !== existing.id));
+        toast.success("Bookmark removed");
+      } else {
+        const pageText = pages[pageIndex] ?? "";
+        const snippet = pageText.slice(0, 45).replace(/\n/g, " ").trim();
+        const label = snippet ? `"${snippet}…"` : `Page ${pageIndex + 1}`;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("reading_bookmarks")
+          .insert({
+            user_id: user.id,
+            gutenberg_book_id: book.id,
+            chunk_index: pageIndex,
+            label,
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          setBookmarks((prev) => [data as ReadingBookmark, ...prev]);
+          toast.success(`Bookmarked page ${pageIndex + 1}`);
+        }
+      }
+    } catch {
+      toast.error("Could not save bookmark");
+    }
+  }
+
+  async function handleDeleteBookmark(bookmarkId: string) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("reading_bookmarks").delete().eq("id", bookmarkId);
+      setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+      toast.success("Bookmark removed");
+    } catch {
+      // ignore
+    }
+  }
+
+  // Extract Table of Contents whenever pages update
+  useEffect(() => {
+    if (pages.length > 0) {
+      const items = extractTableOfContents(pages);
+      setTocItems(items);
+    }
+  }, [pages]);
+
+  // In-book search computation
+  useEffect(() => {
+    if (searchQuery.trim().length >= 2) {
+      const results = searchBookText(pages, searchQuery);
+      setSearchResults(results);
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchQuery, pages]);
+
+  // Load & save reading progress
   async function loadProgress() {
     try {
       const {
@@ -729,6 +1050,108 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     : pageIndex < totalPages - 1;
   const hasPrevPage = effectiveTwoPageMode ? leftPageIndex > 0 : pageIndex > 0;
 
+  // Content for left & right pages
+  const leftText = pages[leftPageIndex] ?? "";
+  const rightText = twoPageMode && rightPageIndex < totalPages ? (pages[rightPageIndex] ?? "") : "";
+
+  // Page-level Read-Aloud (SpeechSynthesis)
+  function stopReadAloud() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+    setIsSpeakingPaused(false);
+    setCurrentSentenceIdx(null);
+  }
+
+  function startReadAloud() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      toast.error("Speech synthesis is not supported in your browser.");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const textToRead = effectiveTwoPageMode
+      ? `${leftText}. ${rightText}`
+      : leftText;
+
+    if (!textToRead.trim()) return;
+
+    const utterance = new SpeechSynthesisUtterance(textToRead);
+    utterance.lang = "en-US";
+    utterance.rate = readAloudRate;
+
+    const sentenceMatches = textToRead.match(/[^.!?]+[.!?]+(\s+|$)/g) || [textToRead];
+    let accum = 0;
+    const sentenceRanges = sentenceMatches.map((s) => {
+      const start = accum;
+      const end = accum + s.length;
+      accum = end;
+      return { start, end };
+    });
+
+    utterance.onboundary = (event) => {
+      if (event.name === "sentence" || event.charIndex !== undefined) {
+        const idx = sentenceRanges.findIndex(
+          (r) => event.charIndex >= r.start && event.charIndex < r.end
+        );
+        if (idx !== -1) {
+          setCurrentSentenceIdx(idx);
+        }
+      }
+    };
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setIsSpeakingPaused(false);
+    };
+
+    utterance.onpause = () => {
+      setIsSpeakingPaused(true);
+    };
+
+    utterance.onresume = () => {
+      setIsSpeakingPaused(false);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setIsSpeakingPaused(false);
+      setCurrentSentenceIdx(null);
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setIsSpeakingPaused(false);
+      setCurrentSentenceIdx(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function togglePauseReadAloud() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      if (isSpeakingPaused) {
+        window.speechSynthesis.resume();
+        setIsSpeakingPaused(false);
+      } else if (isSpeaking) {
+        window.speechSynthesis.pause();
+        setIsSpeakingPaused(true);
+      }
+    }
+  }
+
+  useEffect(() => {
+    stopReadAloud();
+  }, [pageIndex, book.id]);
+
+  useEffect(() => {
+    return () => {
+      stopReadAloud();
+    };
+  }, []);
+
   function handleNextPage() {
     if (hasNextPage) {
       if (!showCheck && !checkAnswered && (pageIndex + 1) % 10 === 0) {
@@ -767,7 +1190,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (showCheck || popover) return;
+      if (showCheck || popover || searchOpen) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault();
@@ -780,7 +1203,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageIndex, totalPages, showCheck, popover, isFlipping, twoPageMode]);
+  }, [pageIndex, totalPages, showCheck, popover, isFlipping, twoPageMode, searchOpen]);
 
   async function triggerComprehensionCheck() {
     if (checkLoading) return;
@@ -892,10 +1315,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const currentTheme = PAPER_THEMES[themeKey];
   const currentFont = FONT_OPTIONS.find((f) => f.id === fontKey) ?? FONT_OPTIONS[0];
 
-  // Content for left & right pages
-  const leftText = pages[leftPageIndex] ?? "";
-  const rightText = twoPageMode && rightPageIndex < totalPages ? (pages[rightPageIndex] ?? "") : "";
-
   const leftParagraphs = leftText.split(/\n\n+/).filter((p) => p.trim().length > 0);
   const rightParagraphs = rightText.split(/\n\n+/).filter((p) => p.trim().length > 0);
 
@@ -904,119 +1323,506 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   return (
     <div
       className={`flipbook-stage w-full transition-all duration-300 ${
-        isFullscreen
-          ? "fixed inset-0 z-[150] bg-black/90 p-4 sm:p-8 overflow-y-auto flex flex-col justify-center"
-          : "max-w-6xl mx-auto space-y-6"
+        focusMode
+          ? "fixed inset-0 z-[190] bg-neutral-950 p-4 sm:p-8 overflow-y-auto flex flex-col justify-between"
+          : isFullscreen
+            ? "fixed inset-0 z-[150] bg-black/90 p-4 sm:p-8 overflow-y-auto flex flex-col justify-center"
+            : "max-w-6xl mx-auto space-y-5"
       }`}
     >
-      {/* Top Header Control Toolbar */}
-      <div className="flex items-center justify-between gap-3 bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/10 text-xs flex-wrap">
-        {/* Back button */}
+      {/* Floating Exit Button in Focus Mode */}
+      {focusMode && (
         <button
-          id="reading-back-btn"
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-neutral-300 hover:text-white transition px-2 py-1 rounded-lg hover:bg-white/10"
+          id="exit-focus-mode-btn"
+          onClick={() => setFocusMode(false)}
+          className="fixed top-4 right-6 z-[210] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-900/90 hover:bg-neutral-800 text-white text-xs border border-white/20 shadow-2xl cursor-pointer transition-all hover:scale-105 active:scale-95"
         >
-          <ChevronLeft size={16} /> <span className="hidden sm:inline">Library</span>
+          <X size={14} className="text-amber-400" />
+          <span className="font-medium">Exit focus mode</span>
         </button>
+      )}
 
-        {/* Title */}
-        <div className="hidden lg:block text-center truncate max-w-xs">
-          <p className="font-semibold text-white truncate">{book.title}</p>
-          <p className="text-[10px] text-neutral-400 truncate">{authors}</p>
-        </div>
-
-        {/* Theme Selector */}
-        <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl">
-          {(Object.keys(PAPER_THEMES) as PaperThemeKey[]).map((key) => (
+      {/* Top Header Control Toolbar */}
+      {!focusMode && (
+        <div className="flex items-center justify-between gap-2 bg-black/60 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 text-xs flex-wrap">
+          {/* Back button & title */}
+          <div className="flex items-center gap-2">
             <button
-              key={key}
-              onClick={() => setThemeKey(key)}
-              className={`px-2.5 py-1 rounded-lg transition-all text-xs flex items-center gap-1 ${
-                themeKey === key
-                  ? "bg-white/20 text-white font-medium shadow"
-                  : "text-neutral-400 hover:text-white"
+              id="reading-back-btn"
+              onClick={onBack}
+              className="flex items-center gap-1 text-neutral-300 hover:text-white transition px-2 py-1 rounded-lg hover:bg-white/10"
+            >
+              <ChevronLeft size={16} /> <span className="hidden sm:inline">Library</span>
+            </button>
+
+            <div className="hidden xl:block max-w-[180px] truncate">
+              <p className="font-semibold text-white truncate text-xs">{book.title}</p>
+              <p className="text-[10px] text-neutral-400 truncate">{authors}</p>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Search in book */}
+            <button
+              id="reading-search-btn"
+              onClick={() => {
+                setSearchOpen(!searchOpen);
+                setSettingsOpen(false);
+                setBookmarksOpen(false);
+                setTocOpen(false);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+                searchOpen
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
               }`}
-              title={PAPER_THEMES[key].name}
+              title="Search in this book"
             >
-              <span>{PAPER_THEMES[key].icon}</span>
-              <span className="hidden md:inline">{PAPER_THEMES[key].name.split(" ")[1]}</span>
+              <Search size={14} />
+              <span className="hidden sm:inline">Search</span>
             </button>
-          ))}
+
+            {/* Table of Contents (hidden if no chapters detected) */}
+            {tocItems.length > 0 && (
+              <button
+                id="reading-toc-btn"
+                onClick={() => {
+                  setTocOpen(!tocOpen);
+                  setSettingsOpen(false);
+                  setBookmarksOpen(false);
+                  setSearchOpen(false);
+                }}
+                className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+                  tocOpen
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
+                }`}
+                title="Table of contents"
+              >
+                <List size={14} />
+                <span className="hidden sm:inline">Contents</span>
+                <span className="bg-white/10 px-1.5 py-0.2 text-[10px] rounded-full">
+                  {tocItems.length}
+                </span>
+              </button>
+            )}
+
+            {/* Bookmark page toggle */}
+            <button
+              id="reading-bookmark-page-btn"
+              onClick={handleToggleBookmark}
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+                isCurrentPageBookmarked
+                  ? "bg-amber-500/30 text-amber-300 border-amber-400/50"
+                  : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
+              }`}
+              title={isCurrentPageBookmarked ? "Remove bookmark" : "Bookmark page"}
+            >
+              {isCurrentPageBookmarked ? (
+                <BookmarkCheck size={14} className="text-amber-400" />
+              ) : (
+                <Bookmark size={14} />
+              )}
+              <span className="hidden sm:inline">
+                {isCurrentPageBookmarked ? "Bookmarked" : "Bookmark"}
+              </span>
+            </button>
+
+            {/* Bookmarks drawer list */}
+            <button
+              id="reading-bookmarks-list-btn"
+              onClick={() => {
+                setBookmarksOpen(!bookmarksOpen);
+                setSettingsOpen(false);
+                setTocOpen(false);
+                setSearchOpen(false);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+                bookmarksOpen
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
+              }`}
+              title="Saved bookmarks"
+            >
+              <Bookmark size={14} />
+              <span className="hidden md:inline">Bookmarks</span>
+              {bookmarks.length > 0 && (
+                <span className="bg-amber-500/20 text-amber-300 px-1.5 py-0.2 text-[10px] rounded-full font-bold">
+                  {bookmarks.length}
+                </span>
+              )}
+            </button>
+
+            {/* Page Read-Aloud Controls */}
+            <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10">
+              {!isSpeaking ? (
+                <button
+                  id="reading-read-aloud-start-btn"
+                  onClick={startReadAloud}
+                  className="px-2 py-1 rounded text-neutral-300 hover:text-white hover:bg-white/10 flex items-center gap-1 transition"
+                  title="Read page aloud"
+                >
+                  <Volume2 size={14} className="text-amber-400" />
+                  <span className="hidden md:inline">Read aloud</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={togglePauseReadAloud}
+                    className="px-2 py-1 rounded text-amber-300 hover:bg-white/10 flex items-center gap-1 transition"
+                    title={isSpeakingPaused ? "Resume speech" : "Pause speech"}
+                  >
+                    {isSpeakingPaused ? <Play size={14} /> : <Pause size={14} />}
+                    <span className="hidden md:inline">{isSpeakingPaused ? "Resume" : "Pause"}</span>
+                  </button>
+                  <button
+                    onClick={stopReadAloud}
+                    className="px-2 py-1 rounded text-red-400 hover:bg-white/10 flex items-center gap-1 transition"
+                    title="Stop speech"
+                  >
+                    <Square size={12} fill="currentColor" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Focus Mode button */}
+            <button
+              id="reading-focus-mode-btn"
+              onClick={() => setFocusMode(true)}
+              className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300 hover:text-white hover:bg-white/10 transition text-xs flex items-center gap-1.5"
+              title="Enter full-screen focus mode"
+            >
+              <Maximize2 size={14} />
+              <span className="hidden lg:inline">Focus mode</span>
+            </button>
+
+            {/* Settings button */}
+            <button
+              id="reading-settings-btn"
+              onClick={() => {
+                setSettingsOpen(!settingsOpen);
+                setBookmarksOpen(false);
+                setTocOpen(false);
+                setSearchOpen(false);
+              }}
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+                settingsOpen
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
+              }`}
+              title="Reading settings"
+            >
+              <Settings size={14} />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* Font & Size Controls */}
-        <div className="flex items-center gap-2">
-          <select
-            value={fontKey}
-            onChange={(e) => setFontKey(e.target.value as FontKey)}
-            className="bg-white/10 border border-white/10 text-white rounded-lg px-2.5 py-1 text-xs outline-none cursor-pointer"
-          >
-            {FONT_OPTIONS.map((f) => (
-              <option key={f.id} value={f.id} className="bg-neutral-900 text-white">
-                {f.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Font Size Adjuster */}
-          <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+      {/* Reading Settings Panel */}
+      {settingsOpen && !focusMode && (
+        <div className="glass-panel p-4 border border-amber-500/30 rounded-2xl space-y-4 max-w-lg mx-auto animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <div className="flex items-center gap-2 text-amber-300 font-semibold text-sm">
+              <Settings size={16} />
+              <span>⚙️ Reading Settings</span>
+            </div>
             <button
-              onClick={() => setFontSize((s) => Math.max(14, s - 1))}
-              className="text-neutral-400 hover:text-white px-1 font-bold text-xs"
-              title="Decrease font size"
+              onClick={() => setSettingsOpen(false)}
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
             >
-              -
-            </button>
-            <span className="text-[11px] text-neutral-300 w-4 text-center">{fontSize}</span>
-            <button
-              onClick={() => setFontSize((s) => Math.min(24, s + 1))}
-              className="text-neutral-400 hover:text-white px-1 font-bold text-xs"
-              title="Increase font size"
-            >
-              +
+              <X size={16} />
             </button>
           </div>
 
-          {/* Two-page vs Single-page Mode */}
-          <button
-            onClick={() => setTwoPageMode(!twoPageMode)}
-            className={`p-1.5 rounded-lg transition hidden md:flex ${
-              twoPageMode ? "bg-white/20 text-white" : "text-neutral-400 hover:text-white"
-            }`}
-            title={twoPageMode ? "Switch to single page view" : "Switch to 2-page open book spread"}
-          >
-            {twoPageMode ? <Columns size={16} /> : <Square size={16} />}
-          </button>
+          {/* Font Size Step */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
+              <Type size={14} className="text-amber-400" />
+              <span>Font Size</span>
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {(["S", "M", "L", "XL"] as FontSizeStep[]).map((step) => (
+                <button
+                  key={step}
+                  onClick={() => void updateAndSavePreferences({ fontSizeStep: step })}
+                  className={`py-1.5 px-3 rounded-xl border text-xs font-semibold transition ${
+                    fontSizeStep === step
+                      ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow"
+                      : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  {step} ({FONT_SIZE_MAP[step]}px)
+                </button>
+              ))}
+            </div>
+          </div>
 
-          {/* Fullscreen Toggle */}
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white transition hover:bg-white/10"
-            title="Toggle Fullscreen"
-          >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-        </div>
-      </div>
+          {/* Line Spacing Step */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
+              <Sliders size={14} className="text-amber-400" />
+              <span>Line Spacing</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["compact", "comfortable", "spacious"] as LineSpacingOption[]).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => void updateAndSavePreferences({ lineSpacing: option })}
+                  className={`py-1.5 px-3 rounded-xl border text-xs font-medium capitalize transition ${
+                    lineSpacing === option
+                      ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow"
+                      : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Progress indicator */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between text-xs text-neutral-400">
-          <span className="label-mono text-[10px]">BOOK PROGRESS</span>
-          <span id="reading-progress-label" className="label-mono text-[var(--color-gold)] text-[11px]">
-            Page {displayProgressPage} of {totalPages} ({Math.round((displayProgressPage / totalPages) * 100)}%)
-          </span>
-        </div>
-        <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-[var(--color-crimson)] via-[var(--color-gold)] to-emerald-400 transition-all duration-500"
-            style={{ width: `${(displayProgressPage / totalPages) * 100}%` }}
-          />
-        </div>
-      </div>
+          {/* Page Theme */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
+              <Palette size={14} className="text-amber-400" />
+              <span>Page Theme</span>
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(Object.keys(PAPER_THEMES) as PaperThemeKey[]).map((key) => {
+                const th = PAPER_THEMES[key];
+                return (
+                  <button
+                    key={key}
+                    onClick={() => void updateAndSavePreferences({ themeKey: key })}
+                    className={`p-2 rounded-xl border text-xs flex items-center gap-2 transition ${
+                      themeKey === key
+                        ? "border-amber-400 ring-2 ring-amber-400/20 shadow-md"
+                        : "border-white/10 hover:border-white/30"
+                    }`}
+                    style={{ backgroundColor: th.bg, color: th.text }}
+                  >
+                    <span>{th.icon}</span>
+                    <span className="font-semibold truncate">{th.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-      {/* Comprehension check modal */}
+          {/* Read-Aloud Speed Rate */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
+              <Volume2 size={14} className="text-amber-400" />
+              <span>Read-Aloud Speed Rate</span>
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {[0.8, 1.0, 1.25, 1.5].map((rate) => (
+                <button
+                  key={rate}
+                  onClick={() => void updateAndSavePreferences({ readAloudRate: rate })}
+                  className={`py-1.5 px-2 rounded-xl border text-xs font-semibold transition ${
+                    readAloudRate === rate
+                      ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow"
+                      : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  {rate}x
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bookmarks Drawer */}
+      {bookmarksOpen && !focusMode && (
+        <div className="glass-panel p-4 border border-amber-500/30 rounded-2xl space-y-3 max-w-lg mx-auto animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <div className="flex items-center gap-2 text-amber-300 font-semibold text-sm">
+              <Bookmark size={16} />
+              <span>🔖 Saved Bookmarks ({bookmarks.length})</span>
+            </div>
+            <button
+              onClick={() => setBookmarksOpen(false)}
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {bookmarks.length === 0 ? (
+            <p className="text-xs text-neutral-400 py-4 text-center">
+              No bookmarks saved for this book yet. Click "Bookmark" in the toolbar to save pages.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {bookmarks.map((bm) => (
+                <div
+                  key={bm.id}
+                  className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-white">Page {bm.chunk_index + 1}</p>
+                    <p className="text-[11px] text-neutral-300 truncate">{bm.label}</p>
+                    <p className="text-[9px] text-neutral-500">
+                      {new Date(bm.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        goToPage(bm.chunk_index);
+                        setBookmarksOpen(false);
+                      }}
+                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs rounded-lg transition font-medium"
+                    >
+                      Jump →
+                    </button>
+                    <button
+                      onClick={() => void handleDeleteBookmark(bm.id)}
+                      className="p-1 text-neutral-400 hover:text-red-400 transition rounded-lg"
+                      title="Delete bookmark"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Table of Contents Drawer */}
+      {tocOpen && !focusMode && (
+        <div className="glass-panel p-4 border border-amber-500/30 rounded-2xl space-y-3 max-w-lg mx-auto animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <div className="flex items-center gap-2 text-amber-300 font-semibold text-sm">
+              <List size={16} />
+              <span>📑 Table of Contents ({tocItems.length})</span>
+            </div>
+            <button
+              onClick={() => setTocOpen(false)}
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {tocItems.map((item, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  goToPage(item.pageIndex);
+                  setTocOpen(false);
+                }}
+                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 text-left transition group border border-transparent hover:border-white/10"
+              >
+                <span className="text-xs text-neutral-200 group-hover:text-amber-300 transition line-clamp-1 font-medium">
+                  {item.title}
+                </span>
+                <span className="text-[10px] text-neutral-400 font-mono ml-2 shrink-0">
+                  Page {item.pageIndex + 1}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* In-Book Search Modal */}
+      {searchOpen && !focusMode && (
+        <div className="glass-panel p-4 border border-amber-500/30 rounded-2xl space-y-3 max-w-xl mx-auto animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <div className="flex items-center gap-2 text-amber-300 font-semibold text-sm">
+              <Search size={16} />
+              <span>🔍 Search in Book</span>
+            </div>
+            <button
+              onClick={() => setSearchOpen(false)}
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Type a word or phrase to search…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+              className="w-full bg-black/40 border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white placeholder-neutral-500 outline-none focus:border-amber-400 transition"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-2.5 text-neutral-400 hover:text-white text-xs"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim().length >= 2 && (
+            <p className="text-[11px] text-neutral-400">
+              Found {searchResults.length} match{searchResults.length === 1 ? "" : "es"}
+            </p>
+          )}
+
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {searchResults.map((res, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  goToPage(res.pageIndex);
+                  setSearchOpen(false);
+                }}
+                className="w-full text-left p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition flex flex-col gap-1 group"
+              >
+                <div className="flex items-center justify-between text-[10px] text-amber-400 font-mono">
+                  <span>Match #{idx + 1}</span>
+                  <span>Page {res.pageIndex + 1} →</span>
+                </div>
+                <p className="text-xs text-neutral-300 font-serif leading-normal group-hover:text-white transition">
+                  <span>{res.prefix}</span>
+                  <mark className="bg-amber-400/30 text-amber-200 px-0.5 rounded font-bold">
+                    {res.matchText}
+                  </mark>
+                  <span>{res.suffix}</span>
+                </p>
+              </button>
+            ))}
+            {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+              <p className="text-xs text-neutral-400 py-4 text-center">No matches found for "{searchQuery}".</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Progress Indicator */}
+      {!focusMode && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-neutral-400">
+            <span className="label-mono text-[10px]">BOOK PROGRESS</span>
+            <span id="reading-progress-label" className="label-mono text-[var(--color-gold)] text-[11px]">
+              Page {displayProgressPage} of {totalPages} ({Math.round((displayProgressPage / totalPages) * 100)}%)
+            </span>
+          </div>
+          <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[var(--color-crimson)] via-[var(--color-gold)] to-emerald-400 transition-all duration-500"
+              style={{ width: `${(displayProgressPage / totalPages) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Comprehension Check Modal */}
       {showCheck && (
         <div className="glass-panel p-6 border-[var(--color-gold)]/40 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 max-w-2xl mx-auto">
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
@@ -1080,9 +1886,13 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         >
           {/* Silk Bookmark Ribbon */}
           <div
-            className="absolute top-0 right-14 w-4 h-24 z-30 shadow-lg rounded-b flex items-end justify-center pb-1"
+            className="absolute top-0 right-14 w-4 h-24 z-30 shadow-lg rounded-b flex items-end justify-center pb-1 cursor-pointer transition-transform hover:scale-105"
+            onClick={handleToggleBookmark}
+            title={isCurrentPageBookmarked ? "Remove bookmark" : "Bookmark current page"}
             style={{
-              background: `linear-gradient(to bottom, ${currentTheme.accent}, #650000)`,
+              background: isCurrentPageBookmarked
+                ? "linear-gradient(to bottom, #f59e0b, #d97706)"
+                : `linear-gradient(to bottom, ${currentTheme.accent}, #650000)`,
             }}
           >
             <Bookmark size={10} className="text-white/80" />
@@ -1142,12 +1952,20 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 className={`prose-reader ${currentFont.cssClass} flex-1`}
                 style={{
                   fontSize: `${fontSize}px`,
-                  lineHeight: "1.85",
+                  lineHeight: lineHeightStr,
                   userSelect: "text",
                 }}
               >
                 {leftParagraphs.map((para, i) => (
-                  <p key={i} style={{ marginBottom: "1.25em", textIndent: i > 0 ? "1.5em" : "0" }}>
+                  <p
+                    key={i}
+                    style={{ marginBottom: "1.25em", textIndent: i > 0 ? "1.5em" : "0" }}
+                    className={
+                      isSpeaking && currentSentenceIdx !== null
+                        ? "transition-colors duration-200"
+                        : ""
+                    }
+                  >
                     {renderClickableText(para.trim())}
                   </p>
                 ))}
@@ -1243,7 +2061,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   className={`prose-reader ${currentFont.cssClass} flex-1`}
                   style={{
                     fontSize: `${fontSize}px`,
-                    lineHeight: "1.85",
+                    lineHeight: lineHeightStr,
                     userSelect: "text",
                   }}
                 >
@@ -1304,7 +2122,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
       )}
 
       {/* Floating Bottom Page Scrub Controller */}
-      {!showCheck && (
+      {!showCheck && !focusMode && (
         <div className="bg-black/60 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10 flex items-center gap-3 text-xs max-w-2xl mx-auto flex-wrap">
           <button
             onClick={() => goToPage(Math.max(0, pageIndex - 10))}

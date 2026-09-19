@@ -465,6 +465,60 @@ export type Database = {
         }
         Relationships: []
       }
+      reading_preferences: {
+        Row: {
+          user_id: string
+          font_size: string
+          line_spacing: string
+          theme: string
+          read_aloud_rate: number
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          font_size?: string
+          line_spacing?: string
+          theme?: string
+          read_aloud_rate?: number
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          font_size?: string
+          line_spacing?: string
+          theme?: string
+          read_aloud_rate?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      reading_bookmarks: {
+        Row: {
+          id: string
+          user_id: string
+          gutenberg_book_id: number
+          chunk_index: number
+          label: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          gutenberg_book_id: number
+          chunk_index: number
+          label?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          gutenberg_book_id?: number
+          chunk_index?: number
+          label?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       shadowing_notes: {
         Row: {
           card_id: string | null
