@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -25,6 +25,7 @@ import {
   NotebookTabs,
   Layers,
   Video,
+  History,
 } from "lucide-react";
 import { confirmDialog } from "@/components/ConfirmDialog";
 import { RetellItModal } from "@/components/RetellItModal";
@@ -80,6 +81,9 @@ function ShadowingPage() {
   const [ytUrl, setYtUrl] = useState("");
   const [fbUrl, setFbUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const historyDrawerRef = useRef<HTMLDivElement | null>(null);
+  const historyToggleRef = useRef<HTMLButtonElement | null>(null);
 
   const currentVideo = player.video;
   const sessionWatched = player.sessionWatched;
@@ -126,6 +130,28 @@ function ShadowingPage() {
       return data as VideoRow[];
     },
   });
+
+  useEffect(() => {
+    if (!historyOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (historyDrawerRef.current?.contains(target)) return;
+      if (historyToggleRef.current?.contains(target)) return;
+      setHistoryOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [historyOpen]);
 
   const openRetellFor = useCallback(
     async (v: VideoRow, watched: number, startedAt: string | null) => {
@@ -294,6 +320,7 @@ function ShadowingPage() {
     } else {
       player.setVideo(v, null);
     }
+    setHistoryOpen(false);
   }
 
   async function deleteVideo(v: VideoRow, e: React.MouseEvent) {
@@ -320,7 +347,7 @@ function ShadowingPage() {
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto px-4 h-[calc(100vh-7rem)] min-h-[650px] flex flex-col gap-4 font-mono text-white overflow-hidden">
+    <div className="max-w-[1840px] mx-auto px-1 sm:px-2 h-[calc(100vh-7rem)] min-h-[650px] flex flex-col gap-3 font-mono text-white overflow-hidden">
       {/* Banner info */}
       {showSkipBanner && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2 text-xs flex items-center justify-between shrink-0">
@@ -339,9 +366,9 @@ function ShadowingPage() {
       <SourceLibrary />
 
       {/* Main Responsive Grid Workspace */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 min-h-0 min-w-0">
-        {/* LEFT COMPONENT: Immersive Player Suite & Horizontal Feed */}
-        <div className="flex flex-col gap-4 min-h-0 min-w-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1450px)_360px] justify-center gap-3 min-h-0 min-w-0 relative">
+        {/* LEFT COMPONENT: Immersive Player Suite */}
+        <div className="flex flex-col min-h-0 min-w-0">
           {/* Main Stage (Video Player / Injection Node) */}
           <div className="flex-1 bg-gradient-to-br from-[#120403]/60 via-[#0d0605]/40 to-black/60 backdrop-blur-md border border-[var(--color-border)]/40 p-4 rounded-2xl flex flex-col justify-between min-h-0 relative shadow-2xl">
             {currentVideo ? (
@@ -365,7 +392,7 @@ function ShadowingPage() {
                 </div>
 
                 {/* Command Deck Controls & Telemetry */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-white/5 pt-3 sm:flex sm:flex-row sm:justify-between">
                   {supportsTransportControls(currentVideo) ? (
                     <div className="flex items-center gap-1.5">
                       <button
@@ -393,7 +420,17 @@ function ShadowingPage() {
                     </p>
                   )}
 
-                  <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-4 w-full sm:w-auto justify-end">
+                    <button
+                      ref={historyToggleRef}
+                      type="button"
+                      onClick={() => setHistoryOpen((open) => !open)}
+                      aria-expanded={historyOpen}
+                      aria-controls="shadowing-history-drawer"
+                      className={`shrink-0 border px-2.5 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-colors ${historyOpen ? "bg-[var(--color-crimson)]/20 border-[var(--color-crimson)]/50 text-white" : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:text-white hover:border-white/15"}`}
+                    >
+                      <History size={13} /> History ({videos.data?.length ?? 0})
+                    </button>
                     <span className="text-[11px] text-[var(--color-gold)] font-audiowide bg-neutral-950/80 px-2.5 py-1.5 border border-white/5 rounded-md">
                       SESSION: {Math.floor(sessionWatched / 60)}:
                       {(sessionWatched % 60).toString().padStart(2, "0")}
@@ -435,11 +472,23 @@ function ShadowingPage() {
             ) : (
               /* Core Empty Injector Hub */
               <div className="h-full flex flex-col justify-between p-4">
-                <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                  <Tv size={14} className="text-[var(--color-crimson)] animate-pulse" />
-                  <span className="font-audiowide text-xs text-[var(--color-gold)] uppercase tracking-wider">
-                    Feed Injector Core
-                  </span>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-white/5 pb-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Tv size={14} className="shrink-0 text-[var(--color-crimson)] animate-pulse" />
+                    <span className="truncate font-audiowide text-xs text-[var(--color-gold)] uppercase tracking-wider">
+                      Feed Injector Core
+                    </span>
+                  </div>
+                  <button
+                    ref={historyToggleRef}
+                    type="button"
+                    onClick={() => setHistoryOpen((open) => !open)}
+                    aria-expanded={historyOpen}
+                    aria-controls="shadowing-history-drawer"
+                    className={`shrink-0 border px-2.5 py-1.5 text-xs rounded-lg flex items-center gap-1.5 transition-colors ${historyOpen ? "bg-[var(--color-crimson)]/20 border-[var(--color-crimson)]/50 text-white" : "bg-neutral-950/60 border-white/5 text-neutral-400 hover:text-white hover:border-white/15"}`}
+                  >
+                    <History size={13} /> History ({videos.data?.length ?? 0})
+                  </button>
                 </div>
 
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-neutral-600 max-w-sm mx-auto">
@@ -536,43 +585,60 @@ function ShadowingPage() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* Compact Horizontal History Carousel */}
-          <div className="bg-neutral-950/30 border border-white/5 p-3 rounded-2xl flex flex-col gap-2 shrink-0 min-w-0">
-            <div className="flex items-center justify-between text-[10px] text-neutral-500 uppercase">
-              <span className="font-bold text-neutral-400 flex items-center gap-1.5">
-                <Layers size={11} /> Segment Logs
-              </span>
-              <Link
-                to="/history"
-                className="hover:text-white transition underline underline-offset-2"
+        {/* RIGHT COMPONENT: history temporarily overlays the notes, never the player */}
+        <div className="relative min-h-[420px] lg:min-h-0 min-w-0 overflow-hidden rounded-2xl">
+          <NotesPanel videoId={currentVideo?.id ?? null} />
+          <div
+            ref={historyDrawerRef}
+            id="shadowing-history-drawer"
+            aria-hidden={!historyOpen}
+            className={`absolute inset-0 z-20 bg-neutral-950/95 backdrop-blur-xl border border-[var(--color-border)]/50 rounded-2xl shadow-2xl flex flex-col min-h-0 transition-[transform,opacity,visibility] duration-300 ease-out motion-reduce:transition-none ${historyOpen ? "translate-x-0 opacity-100 visible pointer-events-auto" : "translate-x-[calc(100%+1rem)] opacity-0 invisible pointer-events-none"}`}
+          >
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 border-b border-white/5 shrink-0">
+              <div className="min-w-0">
+                <p className="font-audiowide text-[10px] uppercase text-[var(--color-gold)] flex items-center gap-1.5">
+                  <History size={12} className="shrink-0" /> Recent history
+                </p>
+                <p className="text-[9px] text-neutral-500 mt-0.5">
+                  {videos.data?.length ?? 0} saved {(videos.data?.length ?? 0) === 1 ? "video" : "videos"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                aria-label="Close history"
+                className="p-1.5 rounded-md border border-white/5 text-neutral-400 hover:text-white hover:border-white/15 transition-colors"
               >
-                Archive ledger →
-              </Link>
+                <X size={14} />
+              </button>
             </div>
 
-            <div className="flex gap-3 overflow-x-auto pb-1 custom-scrollbar scroll-smooth min-w-0">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 space-y-2">
               {videos.data?.map((v) => {
                 const isActive = currentVideo?.id === v.id;
                 return (
                   <div
                     key={v.id}
-                    className={`shrink-0 w-36 bg-neutral-950 border rounded-xl overflow-hidden group relative transition ${isActive ? "border-[var(--color-gold)]/80 shadow-[0_0_8px_rgba(212,175,55,0.15)]" : "border-white/5 hover:border-neutral-700"}`}
+                    className={`grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-2.5 bg-black/30 border rounded-lg overflow-hidden group transition-colors ${isActive ? "border-[var(--color-gold)]/70 bg-[var(--color-gold)]/5" : "border-white/5 hover:border-white/15"}`}
                   >
                     <button
-                      onClick={() => loadFromHistory(v)}
-                      className="w-full text-left flex flex-col"
+                      type="button"
+                      onClick={() => void loadFromHistory(v)}
+                      className="contents text-left"
+                      aria-label={`Load ${v.title || "Untitled video"}`}
                     >
-                      <div className="aspect-video bg-neutral-900 relative w-full overflow-hidden">
+                      <div className="aspect-video bg-neutral-900 relative overflow-hidden">
                         {v.thumbnail_url ? (
                           <img
                             src={v.thumbnail_url}
                             alt=""
-                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
                           />
                         ) : (
-                          <div className="flex flex-col items-center justify-center gap-1 h-full text-[9px] text-neutral-500 uppercase bg-gradient-to-br from-neutral-900 to-black">
-                            <Video size={14} className="opacity-60 text-[var(--color-crimson)]" />
+                          <div className="flex flex-col items-center justify-center gap-1 h-full text-[8px] text-neutral-500 uppercase bg-gradient-to-br from-neutral-900 to-black">
+                            <Video size={13} className="opacity-60 text-[var(--color-crimson)]" />
                             {v.source_type === "upload"
                               ? "Local File"
                               : v.source_type === "facebook"
@@ -581,36 +647,45 @@ function ShadowingPage() {
                           </div>
                         )}
                         {isActive && (
-                          <span className="absolute top-1 left-1 font-audiowide text-[7px] tracking-wider px-1 py-0.5 rounded bg-[var(--color-gold)]/20 text-[var(--color-gold)] border border-[var(--color-gold)]/30">
+                          <span className="absolute top-1 left-1 font-audiowide text-[7px] px-1 py-0.5 rounded bg-[var(--color-gold)]/20 text-[var(--color-gold)] border border-[var(--color-gold)]/30">
                             LIVE
                           </span>
                         )}
                       </div>
-                      <div className="p-1.5 text-[10px] font-mono truncate text-neutral-400 group-hover:text-white">
+                      <span className="min-w-0 text-[10px] font-mono truncate text-neutral-300 group-hover:text-white">
                         {v.title || "Untitled Node"}
-                      </div>
+                      </span>
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => deleteVideo(v, e)}
-                      className="absolute top-1 right-1 p-1 rounded bg-black/80 backdrop-blur text-neutral-500 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
+                      onClick={(e) => void deleteVideo(v, e)}
+                      className="mr-2 p-1.5 rounded-md text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      aria-label={`Delete ${v.title || "video"}`}
                     >
-                      <Trash2 size={10} />
+                      <Trash2 size={12} />
                     </button>
                   </div>
                 );
               })}
               {videos.data?.length === 0 && (
-                <p className="text-[10px] text-neutral-600 uppercase tracking-wider py-2 px-1">
-                  Index logs empty.
-                </p>
+                <div className="border border-dashed border-white/5 p-8 rounded-xl text-center text-neutral-600">
+                  <Layers size={18} className="mx-auto mb-2 opacity-60" />
+                  <p className="text-[10px] uppercase tracking-wider">No saved videos yet</p>
+                </div>
               )}
+            </div>
+
+            <div className="p-3 border-t border-white/5 shrink-0">
+              <Link
+                to="/history"
+                onClick={() => setHistoryOpen(false)}
+                className="flex items-center justify-center w-full px-3 py-2 rounded-lg border border-white/5 bg-black/30 text-[10px] uppercase text-neutral-400 hover:text-white hover:border-white/15 transition-colors"
+              >
+                Open full history →
+              </Link>
             </div>
           </div>
         </div>
-
-        {/* RIGHT COMPONENT: Data Notes Core Panel */}
-        <NotesPanel videoId={currentVideo?.id ?? null} />
       </div>
 
       <RetellItModal
