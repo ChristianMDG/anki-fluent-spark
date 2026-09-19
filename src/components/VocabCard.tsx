@@ -43,6 +43,11 @@ export interface CardRow {
   last_grammar_drill_at?: string | null;
   card_state?: "new" | "learning" | "review" | "relearning";
   learning_step?: number;
+  fsrs_stability?: number | null;
+  fsrs_difficulty?: number | null;
+  fsrs_state?: "new" | "learning" | "review" | "relearning" | null;
+  fsrs_step?: number | null;
+  fsrs_last_review?: string | null;
 }
 
 const SUGGESTED_TAGS = ["Interview", "Daily Life", "Tech", "Travel", "Academic"];

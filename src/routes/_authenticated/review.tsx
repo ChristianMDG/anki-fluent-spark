@@ -4,13 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { VocabCard, CardRow } from "@/components/VocabCard";
 import {
-  scheduleCard,
-  previewIntervalLabel,
+  gradeCard,
+  previewFsrsGrades,
   AnkiGrade,
-  formatDelayLabel,
-  CardSRSMetrics,
-} from "@/lib/sm2";
-import { CheckCircle2, RotateCcw, Library, Clock, Play } from "lucide-react";
+  FSRSCardFields,
+} from "@/lib/fsrs-scheduler";
+import { CheckCircle2, RotateCcw, Library, Clock, Play, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/review")({
@@ -23,6 +22,9 @@ function ReviewPage() {
   const [completedCount, setCompletedCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [now, setNow] = useState<Date>(new Date());
+
+  // Single-level snapshot for Undo functionality
+  const [undoSnapshot, setUndoSnapshot] = useState<{ previousCard: CardRow } | null>(null);
 
   // Ticker to update current time every second for live countdowns and queue sorting
   useEffect(() => {
@@ -101,43 +103,52 @@ function ReviewPage() {
 
     setIsSubmitting(true);
     try {
-      const cardMetrics: CardSRSMetrics = {
-        card_state: currentCard.card_state,
-        learning_step: currentCard.learning_step,
+      // Snapshot previous card state for single-level undo
+      setUndoSnapshot({ previousCard: { ...currentCard } });
+
+      const cardFields: FSRSCardFields = {
+        fsrs_stability: currentCard.fsrs_stability,
+        fsrs_difficulty: currentCard.fsrs_difficulty,
+        fsrs_state: currentCard.fsrs_state,
+        fsrs_step: currentCard.fsrs_step,
+        fsrs_last_review: currentCard.fsrs_last_review,
+        due_at: currentCard.due_at,
+        repetitions: currentCard.repetitions,
         ease_factor: currentCard.ease_factor,
         interval_days: currentCard.interval_days,
-        repetitions: currentCard.repetitions,
+        card_state: currentCard.card_state,
+        learning_step: currentCard.learning_step,
       };
 
-      const result = scheduleCard(cardMetrics, grade, now);
+      const result = gradeCard(cardFields, grade, now);
 
       const updatedCard: CardRow = {
         ...currentCard,
-        card_state: result.card_state,
-        learning_step: result.learning_step,
-        ease_factor: result.ease_factor,
-        interval_days: result.interval_days,
-        repetitions: result.repetitions,
+        fsrs_stability: result.fsrs_stability,
+        fsrs_difficulty: result.fsrs_difficulty,
+        fsrs_state: result.fsrs_state,
+        fsrs_step: result.fsrs_step,
+        fsrs_last_review: result.fsrs_last_review,
         due_at: result.due_at,
-        last_reviewed_at: new Date().toISOString(),
+        last_reviewed_at: result.last_reviewed_at,
       };
 
       // Update row in Supabase
       const { error } = await supabase
         .from("cards")
         .update({
-          card_state: result.card_state,
-          learning_step: result.learning_step,
-          ease_factor: result.ease_factor,
-          interval_days: result.interval_days,
-          repetitions: result.repetitions,
+          fsrs_stability: result.fsrs_stability,
+          fsrs_difficulty: result.fsrs_difficulty,
+          fsrs_state: result.fsrs_state,
+          fsrs_step: result.fsrs_step,
+          fsrs_last_review: result.fsrs_last_review,
           due_at: result.due_at,
-          last_reviewed_at: updatedCard.last_reviewed_at,
+          last_reviewed_at: result.last_reviewed_at,
         })
         .eq("id", currentCard.id);
 
       if (error) {
-        console.warn("Card update warning:", error.message);
+        console.warn("Card FSRS update warning:", error.message);
       }
 
       // Check horizon: if new due_at is within short horizon (~20 mins from now), re-insert into live queue
@@ -157,7 +168,51 @@ function ReviewPage() {
       qc.invalidateQueries({ queryKey: ["cards"] });
       qc.invalidateQueries({ queryKey: ["stats"] });
     } catch (err) {
-      toast.error("An error occurred saving review state.");
+      toast.error("An error occurred saving FSRS review state.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleUndo() {
+    if (!undoSnapshot || isSubmitting) return;
+
+    const { previousCard } = undoSnapshot;
+    setIsSubmitting(true);
+
+    try {
+      // Revert in Supabase
+      const { error } = await supabase
+        .from("cards")
+        .update({
+          fsrs_stability: previousCard.fsrs_stability ?? null,
+          fsrs_difficulty: previousCard.fsrs_difficulty ?? null,
+          fsrs_state: previousCard.fsrs_state ?? "new",
+          fsrs_step: previousCard.fsrs_step ?? null,
+          fsrs_last_review: previousCard.fsrs_last_review ?? null,
+          due_at: previousCard.due_at ?? new Date().toISOString(),
+          last_reviewed_at: previousCard.last_reviewed_at ?? null,
+        })
+        .eq("id", previousCard.id);
+
+      if (error) {
+        toast.error("Failed to undo card review: " + error.message);
+        return;
+      }
+
+      setQueue((prevQueue) => {
+        const withoutTarget = (prevQueue ?? []).filter((c) => c.id !== previousCard.id);
+        return [previousCard, ...withoutTarget];
+      });
+
+      setCompletedCount((prev) => Math.max(0, prev - 1));
+      setUndoSnapshot(null);
+      toast.success(`Undid review for "${previousCard.word}"`);
+
+      qc.invalidateQueries({ queryKey: ["cards"] });
+      qc.invalidateQueries({ queryKey: ["stats"] });
+    } catch (err) {
+      toast.error("An error occurred restoring card state.");
     } finally {
       setIsSubmitting(false);
     }
@@ -179,6 +234,24 @@ function ReviewPage() {
       ),
     );
   }
+
+  const currentCardFields: FSRSCardFields = useMemo(() => {
+    if (!currentCard) return {};
+    return {
+      fsrs_stability: currentCard.fsrs_stability,
+      fsrs_difficulty: currentCard.fsrs_difficulty,
+      fsrs_state: currentCard.fsrs_state,
+      fsrs_step: currentCard.fsrs_step,
+      fsrs_last_review: currentCard.fsrs_last_review,
+      due_at: currentCard.due_at,
+      repetitions: currentCard.repetitions,
+    };
+  }, [currentCard]);
+
+  const previewLabels = useMemo(() => {
+    if (!currentCard) return { again: "<1m", hard: "6m", good: "10m", easy: "4d" };
+    return previewFsrsGrades(currentCardFields, now);
+  }, [currentCard, currentCardFields, now]);
 
   if (isLoading || queue === null) {
     return (
@@ -251,19 +324,6 @@ function ReviewPage() {
 
   if (!currentCard) return null;
 
-  const cardMetrics: CardSRSMetrics = {
-    card_state: currentCard.card_state,
-    learning_step: currentCard.learning_step,
-    ease_factor: currentCard.ease_factor,
-    interval_days: currentCard.interval_days,
-    repetitions: currentCard.repetitions,
-  };
-
-  const previewAgain = previewIntervalLabel(cardMetrics, "again", now);
-  const previewHard = previewIntervalLabel(cardMetrics, "hard", now);
-  const previewGood = previewIntervalLabel(cardMetrics, "good", now);
-  const previewEasy = previewIntervalLabel(cardMetrics, "easy", now);
-
   return (
     <div className="max-w-xl mx-auto space-y-5 animate-in fade-in duration-500">
       <style>{`
@@ -276,11 +336,23 @@ function ReviewPage() {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-[var(--color-crimson)] shadow-[0_0_8px_var(--color-crimson)] animate-pulse" />
           <span className="font-audiowide text-xs font-bold uppercase tracking-wider text-white">
-            SRS Live Session
+            FSRS Live Session
           </span>
         </div>
 
         <div className="flex items-center gap-2">
+          {undoSnapshot && (
+            <button
+              onClick={handleUndo}
+              disabled={isSubmitting}
+              title={`Undo last review for "${undoSnapshot.previousCard.word}"`}
+              className="font-audiowide text-[11px] text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg px-2.5 py-1 flex items-center gap-1 transition-all"
+            >
+              <Undo2 size={12} />
+              <span>Undo</span>
+            </button>
+          )}
+
           <span className="font-audiowide text-[11px] text-[var(--color-gold)] bg-[var(--color-gold)]/10 border border-[var(--color-gold)]/30 rounded-lg px-2.5 py-1">
             {completedCount > 0 ? `Done: ${completedCount} · ` : ""}
             {sortedQueue.length} left in session
@@ -331,7 +403,7 @@ function ReviewPage() {
           {/* Grade Buttons Bar */}
           <div className="glass-panel p-3.5 bg-black/60 backdrop-blur-xl border border-[var(--color-border)]/50 rounded-2xl shadow-[0_15px_35px_rgba(0,0,0,0.6)] space-y-2">
             <p className="font-audiowide text-[9px] uppercase tracking-[0.2em] text-neutral-400 text-center select-none">
-              Grade Recall Quality
+              Grade Recall Quality (FSRS)
             </p>
 
             <div className="grid grid-cols-4 gap-2">
@@ -346,7 +418,7 @@ function ReviewPage() {
                   Again
                 </span>
                 <span className="text-[9px] font-mono text-red-400/80 mt-0.5">
-                  → {previewAgain}
+                  → {previewLabels.again}
                 </span>
               </button>
 
@@ -361,7 +433,7 @@ function ReviewPage() {
                   Hard
                 </span>
                 <span className="text-[9px] font-mono text-amber-400/80 mt-0.5">
-                  → {previewHard}
+                  → {previewLabels.hard}
                 </span>
               </button>
 
@@ -376,7 +448,7 @@ function ReviewPage() {
                   Good
                 </span>
                 <span className="text-[9px] font-mono text-sky-400/80 mt-0.5">
-                  → {previewGood}
+                  → {previewLabels.good}
                 </span>
               </button>
 
@@ -391,7 +463,7 @@ function ReviewPage() {
                   Easy
                 </span>
                 <span className="text-[9px] font-mono text-emerald-400/80 mt-0.5">
-                  → {previewEasy}
+                  → {previewLabels.easy}
                 </span>
               </button>
             </div>
