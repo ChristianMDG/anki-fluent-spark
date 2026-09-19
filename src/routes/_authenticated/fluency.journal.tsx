@@ -37,6 +37,7 @@ type Row = {
   fluency_rating: number | null;
   confidence_rating: number | null;
   hesitation_rating: number | null;
+  comprehension_score: string | null;
   pinned: boolean;
   created_at: string;
 };
@@ -337,6 +338,7 @@ function FluencyJournal() {
             <option value="free_talk">Free Talk</option>
             <option value="chunk_repeat">Chunk Repeat</option>
             <option value="dialogue">Dialogue</option>
+            <option value="listening">🎧 Listening Challenge</option>
             <option value="retell">🔁 Retell</option>
           </select>
         </div>
@@ -439,25 +441,35 @@ function RecordingCard({ row, onTogglePin }: { row: Row; onTogglePin: (r: Row) =
         </button>
       </div>
 
-      {expired ? (
-        <p className="text-xs text-muted-foreground italic">Recording expired (90 days)</p>
-      ) : audioUrl ? (
-        <audio src={audioUrl} controls className="w-full h-9" />
+      {row.exercise_type === "listening" ? (
+        <div className="pt-1">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[color:var(--color-gold)]/10 border border-[color:var(--color-gold)]/30 text-xs font-semibold text-[color:var(--color-gold)]">
+            Comprehension Score: {row.comprehension_score ?? "Completed"}
+          </span>
+        </div>
       ) : (
-        <button
-          onClick={loadAudio}
-          disabled={loading}
-          className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-border)] hover:bg-white/5"
-        >
-          {loading ? "Loading..." : "▶ Listen"}
-        </button>
-      )}
+        <>
+          {expired ? (
+            <p className="text-xs text-muted-foreground italic">Recording expired (90 days)</p>
+          ) : audioUrl ? (
+            <audio src={audioUrl} controls className="w-full h-9" />
+          ) : (
+            <button
+              onClick={loadAudio}
+              disabled={loading}
+              className="text-xs rounded-lg px-3 py-1.5 border border-[color:var(--color-border)] hover:bg-white/5"
+            >
+              {loading ? "Loading..." : "▶ Listen"}
+            </button>
+          )}
 
-      <div className="flex gap-2 flex-wrap pt-1">
-        <RatingBar label="Fluency" value={row.fluency_rating} color="#dc2626" />
-        <RatingBar label="Confidence" value={row.confidence_rating} color="#eab308" />
-        <RatingBar label="Hesitations" value={row.hesitation_rating} color="#94a3b8" />
-      </div>
+          <div className="flex gap-2 flex-wrap pt-1">
+            <RatingBar label="Fluency" value={row.fluency_rating} color="#dc2626" />
+            <RatingBar label="Confidence" value={row.confidence_rating} color="#eab308" />
+            <RatingBar label="Hesitations" value={row.hesitation_rating} color="#94a3b8" />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -487,6 +499,7 @@ function RatingBar({
 
 function labelType(t: string) {
   if (t === "retell") return "🔁 Retell";
+  if (t === "listening") return "🎧 Listening Challenge";
   return t === "free_talk" ? "Free Talk" : t === "chunk_repeat" ? "Chunk Repeat" : "Dialogue";
 }
 

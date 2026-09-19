@@ -179,6 +179,7 @@ export type Database = {
       fluency_recordings: {
         Row: {
           confidence_rating: number | null
+          comprehension_score: string | null
           created_at: string
           duration_seconds: number
           exercise_type: string
@@ -194,6 +195,7 @@ export type Database = {
         }
         Insert: {
           confidence_rating?: number | null
+          comprehension_score?: string | null
           created_at?: string
           duration_seconds?: number
           exercise_type: string
@@ -209,6 +211,7 @@ export type Database = {
         }
         Update: {
           confidence_rating?: number | null
+          comprehension_score?: string | null
           created_at?: string
           duration_seconds?: number
           exercise_type?: string

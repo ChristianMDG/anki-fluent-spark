@@ -330,3 +330,97 @@ export const extractAndSaveWeakPoint = createServerFn({ method: "POST" })
       });
     }
   });
+
+// ---------------------------------------------------------------------------
+// Listening Challenge Passage Generator
+// Generates a short spoken passage, 2-3 comprehension questions, challenging
+// spot tips, and a dictation sentence.
+// ---------------------------------------------------------------------------
+
+const LISTENING_SYSTEM = `You generate a short, natural spoken English passage (monologue or dialogue) on a given topic, appropriate for an English language learner at a specified CEFR level.
+
+Output ONLY a single valid JSON object on a single line with NO markdown formatting, NO markdown backticks, NO preamble:
+{
+  "passage": "<text of passage, approx 80-140 words>",
+  "questions": [
+    {
+      "question": "<comprehension question>",
+      "options": ["<option 0>", "<option 1>", "<option 2>"],
+      "correctIndex": <0, 1, or 2>
+    }
+  ],
+  "challengingSpots": [
+    {
+      "phrase": "<exact phrase from passage>",
+      "tip": "<short tip explaining connected speech, reduction, or sound feature that French speakers commonly mishear>"
+    }
+  ],
+  "dictationSentence": "<one moderately tricky sentence from the passage suitable for a dictation test>"
+}
+
+Ensure questions test genuine comprehension (main idea, detail, or inference), NOT trivia or spelling. Options must be 3 plausible choices.`;
+
+export interface ListeningPassageResult {
+  passage: string;
+  questions: Array<{
+    question: string;
+    options: [string, string, string];
+    correctIndex: number;
+  }>;
+  challengingSpots: Array<{
+    phrase: string;
+    tip: string;
+  }>;
+  dictationSentence: string;
+}
+
+const listeningSchema = z.object({
+  passage: z.string().min(20).max(2000),
+  questions: z
+    .array(
+      z.object({
+        question: z.string(),
+        options: z.tuple([z.string(), z.string(), z.string()]),
+        correctIndex: z.number().int().min(0).max(2),
+      }),
+    )
+    .min(2)
+    .max(4),
+  challengingSpots: z
+    .array(
+      z.object({
+        phrase: z.string(),
+        tip: z.string(),
+      }),
+    )
+    .default([]),
+  dictationSentence: z.string(),
+});
+
+export const generateListeningPassage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: {
+      theme: string;
+      level: "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+    }) =>
+      z
+        .object({
+          theme: z.string().max(200),
+          level: z.enum(["A1", "A2", "B1", "B2", "C1", "C2"]),
+        })
+        .parse(d),
+  )
+  .handler(async ({ data }): Promise<ListeningPassageResult> => {
+    const userPrompt = `Topic: ${data.theme}\nCEFR Level: ${data.level}\n\nGenerate the listening passage JSON now.`;
+    const raw = await callAI(LISTENING_SYSTEM, userPrompt);
+
+    const cleaned = raw.replace(/```(?:json)?|```/g, "").trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Invalid response format from AI for listening passage.");
+    }
+
+    const obj = JSON.parse(jsonMatch[0]) as unknown;
+    return listeningSchema.parse(obj);
+  });

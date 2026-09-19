@@ -10,6 +10,8 @@ import {
   generateDialogueHint,
   generateSpeakingFeedback,
   extractAndSaveWeakPoint,
+  generateListeningPassage,
+  type ListeningPassageResult,
 } from "@/lib/fluency.functions";
 import {
   SESSION_CONFIG,
@@ -45,6 +47,9 @@ import {
   X,
   Sparkles,
   MessageSquare,
+  Headphones,
+  Play,
+  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,7 +58,7 @@ export const Route = createFileRoute("/_authenticated/fluency/")({
   component: FluencyPage,
 });
 
-type ExerciseType = "free_talk" | "chunk_repeat" | "dialogue";
+type ExerciseType = "free_talk" | "chunk_repeat" | "dialogue" | "listening";
 
 interface DialogueTurn {
   speaker: "ai" | "learner";
@@ -65,20 +70,22 @@ interface Exercise {
   prompt: string;
   chunks?: string[];
   vocab?: string[];
+  listeningData?: ListeningPassageResult;
 }
 
 interface RecordingState {
-  blob: Blob;
-  url: string;
+  blob?: Blob;
+  url?: string;
   durationSec: number;
   storagePath?: string;
   recordingId?: string;
   ratings: { fluency: number; confidence: number; hesitation: number };
   pinned: boolean;
   dialogueTurns?: DialogueTurn[];
+  comprehensionScore?: string;
 }
 
-type SessionMode = "mixed" | "free_talk" | "chunk_repeat" | "dialogue";
+type SessionMode = "mixed" | "free_talk" | "chunk_repeat" | "dialogue" | "listening";
 
 // ---------------------------------------------------------------------------
 // Hooks — Learner Profile
@@ -341,6 +348,7 @@ function FluencyPage() {
   const streak = useFluencyStreak();
   const getTheme = useServerFn(generateSessionTheme);
   const genPrompt = useServerFn(generateFluencyPrompt);
+  const genListening = useServerFn(generateListeningPassage);
   const qc = useQueryClient();
 
   const { profile, setLevel, isLoading: profileLoading } = useLearnerProfile();
@@ -396,10 +404,11 @@ function FluencyPage() {
 
   async function buildExercises(count: number): Promise<Exercise[]> {
     const modeToOrder: Record<SessionMode, ExerciseType[]> = {
-      mixed: ["free_talk", "chunk_repeat", "dialogue"],
+      mixed: ["free_talk", "chunk_repeat", "dialogue", "listening"],
       free_talk: ["free_talk"],
       chunk_repeat: ["chunk_repeat"],
       dialogue: ["dialogue"],
+      listening: ["listening"],
     };
     const order: ExerciseType[] = modeToOrder[sessionMode];
     const chunks = await loadChunksPool();
@@ -409,7 +418,39 @@ function FluencyPage() {
     const out: Exercise[] = [];
     for (let i = 0; i < count; i++) {
       const type = order[i % order.length];
-      if (type === "chunk_repeat") {
+      if (type === "listening") {
+        try {
+          const listeningData = await genListening({
+            data: { level: cefrLevel as "A1" | "A2" | "B1" | "B2" | "C1" | "C2", theme: sessionTheme },
+          });
+          out.push({
+            type,
+            prompt: `Listening Challenge: ${sessionTheme}`,
+            listeningData,
+            vocab,
+          });
+        } catch {
+          out.push({
+            type,
+            prompt: `Listening Challenge: ${sessionTheme}`,
+            listeningData: {
+              passage: `In today's fast-paced environment, taking time for hobbies is essential for maintaining personal balance and preventing burnout. Many people find that engaging in creative activities helps reduce daily stress and improves overall focus.`,
+              questions: [
+                {
+                  question: "What is essential for maintaining balance?",
+                  options: ["Taking time for hobbies", "Working longer hours", "Avoiding breaks"],
+                  correctIndex: 0,
+                },
+              ],
+              challengingSpots: [
+                { phrase: "fast-paced", tip: "T is unreleased before P in fast speech" },
+              ],
+              dictationSentence: "Taking time for hobbies is essential for maintaining personal balance.",
+            },
+            vocab,
+          });
+        }
+      } else if (type === "chunk_repeat") {
         const picked = chunks.length
           ? shuffle(chunks).slice(0, Math.min(5, Math.max(3, chunks.length)))
           : ["on the other hand", "to be honest", "at the end of the day", "as far as I know"];
@@ -546,20 +587,39 @@ function FluencyPage() {
   }
 
   if (phase === "summary") {
-    const avg = averageRatings(recordings);
+    const speakingRecs = recordings.filter((r) => !r.comprehensionScore);
+    const listeningRecs = recordings.filter((r) => r.comprehensionScore);
+    const avg = averageRatings(speakingRecs);
     return (
       <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="glass-panel p-8 text-center space-y-4">
           <p className="label-mono text-[color:var(--color-gold)]">Session Complete</p>
           <h1 className="text-3xl font-bold">Nicely done.</h1>
           <p className="text-muted-foreground">
-            {recordings.length} exercise{recordings.length > 1 ? "s" : ""} recorded.
+            {recordings.length} exercise{recordings.length > 1 ? "s" : ""} completed.
           </p>
-          <div className="grid grid-cols-3 gap-3 pt-2">
-            <SummaryStat label="Fluency" value={avg.fluency} />
-            <SummaryStat label="Confidence" value={avg.confidence} />
-            <SummaryStat label="Hesitations" value={avg.hesitation} />
-          </div>
+          {speakingRecs.length > 0 && (
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <SummaryStat label="Fluency" value={avg.fluency} />
+              <SummaryStat label="Confidence" value={avg.confidence} />
+              <SummaryStat label="Hesitations" value={avg.hesitation} />
+            </div>
+          )}
+          {listeningRecs.length > 0 && (
+            <div className="pt-2">
+              <p className="label-mono text-[color:var(--color-gold)] mb-2">🎧 Listening Comprehension</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                {listeningRecs.map((r, idx) => (
+                  <span
+                    key={idx}
+                    className="px-4 py-2 rounded-xl bg-white/5 border border-[color:var(--color-gold)]/40 text-sm font-medium"
+                  >
+                    Listening #{idx + 1}: <strong className="text-[color:var(--color-gold)] font-bold">{r.comprehensionScore}</strong> correct
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex gap-3 justify-center pt-4">
             <button
               onClick={() => {
@@ -815,13 +875,13 @@ function FluencyEntry({
       {/* ---- Session Type Selector ---- */}
       <div>
         <p className="label-mono mb-3">Session Type</p>
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {(
             [
               {
                 key: "mixed" as const,
                 label: "Mixed",
-                desc: "Rotates through Free Talk, Chunk Repeat, and Dialogue.",
+                desc: "Rotates through Free Talk, Chunk Repeat, Dialogue, and Listening.",
                 icon: Sparkles,
               },
               {
@@ -841,6 +901,12 @@ function FluencyEntry({
                 label: "Dialogue only",
                 desc: "Real back-and-forth AI conversation with live voice transcript.",
                 icon: MessageSquare,
+              },
+              {
+                key: "listening" as const,
+                label: "Listening only",
+                desc: "No captions during playback, comprehension quiz & phonetic tips.",
+                icon: Headphones,
               },
             ] as const
           ).map((m) => {
@@ -878,6 +944,439 @@ function FluencyEntry({
           {starting ? "Preparing exercises…" : "Start Session"} <ChevronRight size={18} />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Listening Runner
+// ---------------------------------------------------------------------------
+
+function renderPassageWithSpots(
+  passage: string,
+  spots: { phrase: string; tip: string }[],
+  onSelectSpot: (s: { phrase: string; tip: string }) => void,
+) {
+  if (!spots || spots.length === 0) return passage;
+
+  const escaped = spots.map((s) => s.phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const regex = new RegExp(`(${escaped.join("|")})`, "gi");
+
+  const parts = passage.split(regex);
+  return parts.map((part, i) => {
+    const matchedSpot = spots.find((s) => s.phrase.toLowerCase() === part.toLowerCase());
+    if (matchedSpot) {
+      return (
+        <button
+          key={i}
+          onClick={() => onSelectSpot(matchedSpot)}
+          className="inline-flex items-center underline decoration-[color:var(--color-gold)] decoration-2 text-[color:var(--color-gold)] font-medium hover:bg-[color:var(--color-gold)]/20 px-1 rounded transition"
+          title={`Tip: ${matchedSpot.tip}`}
+        >
+          {part}
+        </button>
+      );
+    }
+    return part;
+  });
+}
+
+function ListeningRunner({
+  exercise,
+  sessionId,
+  sessionTheme,
+  cefrLevel,
+  stepIndex,
+  totalSteps,
+  onComplete,
+  onBack,
+}: {
+  exercise: Exercise;
+  sessionId: string;
+  sessionTheme: string;
+  cefrLevel: string;
+  stepIndex: number;
+  totalSteps: number;
+  onComplete: (r: RecordingState) => void;
+  onBack: () => void;
+}) {
+  const data: ListeningPassageResult = exercise.listeningData ?? {
+    passage: "The speaker discussed weekend activities and hobbies.",
+    questions: [
+      {
+        question: "What was discussed?",
+        options: ["Weekend activities", "Work stress", "Vacation plans"],
+        correctIndex: 0,
+      },
+    ],
+    challengingSpots: [],
+    dictationSentence: "The speaker discussed weekend activities.",
+  };
+
+  const [phase, setPhase] = useState<"listen" | "questions" | "transcript" | "dictation">("listen");
+  const [playCount, setPlayCount] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const [activeSpot, setActiveSpot] = useState<{ phrase: string; tip: string } | null>(null);
+
+  const [dictationInput, setDictationInput] = useState("");
+  const [dictationChecked, setDictationChecked] = useState(false);
+  const [dictationPlaying, setDictationPlaying] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+  const startTimeRef = useRef(Date.now());
+
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  function handlePlayPassage() {
+    if (playCount >= 2 || isPlaying) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      toast.error("Speech synthesis is not supported in this browser.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(data.passage);
+    u.lang = "en-US";
+    u.rate = 0.92;
+    u.onstart = () => {
+      setIsPlaying(true);
+      setPlayCount((c) => c + 1);
+    };
+    u.onend = () => setIsPlaying(false);
+    u.onerror = () => setIsPlaying(false);
+    window.speechSynthesis.speak(u);
+  }
+
+  function handlePlayDictation() {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(data.dictationSentence);
+    u.lang = "en-US";
+    u.rate = 0.9;
+    u.onstart = () => setDictationPlaying(true);
+    u.onend = () => setDictationPlaying(false);
+    u.onerror = () => setDictationPlaying(false);
+    window.speechSynthesis.speak(u);
+  }
+
+  const correctCount = useMemo(() => {
+    return data.questions.filter((q, idx) => selectedAnswers[idx] === q.correctIndex).length;
+  }, [data.questions, selectedAnswers]);
+
+  const scoreStr = `${correctCount}/${data.questions.length}`;
+
+  async function finishExercise() {
+    setSaving(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const durationSec = Math.round((Date.now() - startTimeRef.current) / 1000);
+
+      const { data: row, error } = await supabase
+        .from("fluency_recordings")
+        .insert({
+          user_id: user.id,
+          session_id: sessionId,
+          exercise_type: "listening",
+          prompt_text: `Listening Challenge: ${sessionTheme}`,
+          week_theme: sessionTheme,
+          storage_path: null,
+          duration_seconds: durationSec,
+          fluency_rating: null,
+          confidence_rating: null,
+          hesitation_rating: null,
+          comprehension_score: scoreStr,
+          pinned: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      onComplete({
+        durationSec,
+        ratings: {
+          fluency: Math.round((correctCount / (data.questions.length || 1)) * 5),
+          confidence: 5,
+          hesitation: 5,
+        },
+        pinned: false,
+        recordingId: row.id,
+        comprehensionScore: scoreStr,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save result");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="glass-panel p-6 md:p-8 space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between border-b border-[color:var(--color-border)] pb-4">
+        <div className="flex items-center gap-2 label-mono text-[color:var(--color-gold)]">
+          <Headphones size={18} /> Listening Challenge
+        </div>
+        <span className="text-xs label-mono text-muted-foreground">
+          Step {phase === "listen" ? "1/4" : phase === "questions" ? "2/4" : phase === "transcript" ? "3/4" : "4/4"}
+        </span>
+      </div>
+
+      {phase === "listen" && (
+        <div className="space-y-6 text-center py-4">
+          <div className="max-w-md mx-auto space-y-2">
+            <h2 className="text-2xl font-bold">Listen to the passage</h2>
+            <p className="text-sm text-muted-foreground">
+              No captions are shown during audio playback to test real comprehension. You can replay at most once.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center gap-4 pt-2">
+            <button
+              onClick={handlePlayPassage}
+              disabled={isPlaying || playCount >= 2}
+              className={`relative h-28 w-28 rounded-full flex items-center justify-center transition shadow-lg ${
+                isPlaying
+                  ? "bg-[color:var(--color-gold)] text-black"
+                  : playCount >= 2
+                  ? "bg-white/10 text-muted-foreground cursor-not-allowed opacity-50"
+                  : "bg-[color:var(--color-gold)] hover:bg-yellow-400 text-black"
+              }`}
+              aria-label="Play passage"
+            >
+              {isPlaying && (
+                <span className="absolute inset-0 rounded-full bg-[color:var(--color-gold)] opacity-50 animate-ping" />
+              )}
+              {isPlaying ? <Loader2 size={36} className="animate-spin" /> : <Play size={36} className="ml-1" />}
+            </button>
+
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">
+                {isPlaying
+                  ? "Playing passage audio…"
+                  : playCount === 0
+                  ? "Press to listen for the 1st time"
+                  : playCount === 1
+                  ? "Press to replay (1 replay available)"
+                  : "Replay limit reached (0 replays remaining)"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Replays used: {playCount} / 2
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-6 flex justify-center">
+            <button
+              onClick={() => {
+                window.speechSynthesis?.cancel();
+                setIsPlaying(false);
+                setPhase("questions");
+              }}
+              disabled={playCount === 0}
+              className="btn-crimson rounded-lg px-6 py-2.5 font-semibold text-sm flex items-center gap-2 disabled:opacity-40"
+            >
+              Proceed to Questions <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === "questions" && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <HelpCircle size={20} className="text-[color:var(--color-gold)]" /> Comprehension Questions
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Answer the questions based on what you heard.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            {data.questions.map((q, idx) => (
+              <div key={idx} className="glass-panel-soft p-4 rounded-xl space-y-3">
+                <p className="font-medium text-base">
+                  {idx + 1}. {q.question}
+                </p>
+                <div className="grid gap-2">
+                  {q.options.map((opt, optIdx) => {
+                    const selected = selectedAnswers[idx] === optIdx;
+                    const isCorrect = optIdx === q.correctIndex;
+                    let style = "border-[color:var(--color-border)] hover:bg-white/5";
+                    if (submitted) {
+                      if (isCorrect) style = "border-green-500/50 bg-green-500/10 text-green-200 font-semibold";
+                      else if (selected && !isCorrect) style = "border-red-500/50 bg-red-500/10 text-red-200";
+                    } else if (selected) {
+                      style = "border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/20 text-white font-semibold";
+                    }
+
+                    return (
+                      <button
+                        key={optIdx}
+                        disabled={submitted}
+                        onClick={() => setSelectedAnswers((prev) => ({ ...prev, [idx]: optIdx }))}
+                        className={`w-full text-left p-3 rounded-lg border text-sm transition flex items-center justify-between ${style}`}
+                      >
+                        <span>{opt}</span>
+                        {submitted && isCorrect && <CheckCircle2 size={16} className="text-green-400 shrink-0" />}
+                        {submitted && selected && !isCorrect && <X size={16} className="text-red-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {!submitted ? (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSubmitted(true)}
+                disabled={Object.keys(selectedAnswers).length < data.questions.length}
+                className="btn-crimson rounded-lg px-5 py-2.5 font-semibold text-sm disabled:opacity-40"
+              >
+                Submit Answers
+              </button>
+            </div>
+          ) : (
+            <div className="glass-panel p-4 rounded-xl flex items-center justify-between gap-4">
+              <div>
+                <span className="text-xs label-mono text-muted-foreground">Your Score</span>
+                <p className="text-xl font-bold text-[color:var(--color-gold)]">
+                  {scoreStr} correct
+                </p>
+              </div>
+              <button
+                onClick={() => setPhase("transcript")}
+                className="btn-crimson rounded-lg px-5 py-2.5 font-semibold text-sm flex items-center gap-2"
+              >
+                Reveal Transcript & Phonetic Tips <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {phase === "transcript" && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold">Transcript & Phonetic Breakdown</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tap highlighted spots to inspect connected speech, reductions, or tricky sounds.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-[color:var(--color-gold)]/10 border border-[color:var(--color-gold)]/40 text-xs font-mono text-[color:var(--color-gold)] font-bold">
+              Score: {scoreStr}
+            </span>
+          </div>
+
+          <div className="glass-panel-soft p-5 rounded-xl space-y-3 leading-relaxed text-base">
+            <p className="text-lg">
+              {renderPassageWithSpots(data.passage, data.challengingSpots, (spot) => setActiveSpot(spot))}
+            </p>
+          </div>
+
+          {activeSpot && (
+            <div className="rounded-xl border border-[color:var(--color-gold)]/40 bg-[color:var(--color-gold)]/10 p-4 space-y-1 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-[color:var(--color-gold)]">"{activeSpot.phrase}"</span>
+              </div>
+              <p className="text-sm text-foreground">💡 {activeSpot.tip}</p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            {data.dictationSentence ? (
+              <button
+                onClick={() => setPhase("dictation")}
+                className="rounded-lg px-4 py-2.5 border border-[color:var(--color-border)] hover:bg-white/5 text-sm font-medium flex items-center gap-2"
+              >
+                Try Dictation Challenge (Optional) <ChevronRight size={16} />
+              </button>
+            ) : <div />}
+
+            <button
+              onClick={() => void finishExercise()}
+              disabled={saving}
+              className="btn-crimson rounded-lg px-6 py-2.5 font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Finish Exercise"} <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === "dictation" && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-xl font-bold">Dictation Challenge</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Listen to a key sentence from the passage and type exactly what you hear.
+            </p>
+          </div>
+
+          <div className="glass-panel-soft p-5 rounded-xl space-y-4 text-center">
+            <button
+              onClick={handlePlayDictation}
+              disabled={dictationPlaying}
+              className="btn-crimson mx-auto px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2"
+            >
+              {dictationPlaying ? <Loader2 size={16} className="animate-spin" /> : <Volume2 size={16} />}
+              {dictationPlaying ? "Playing sentence…" : "Play Sentence Audio"}
+            </button>
+
+            <textarea
+              value={dictationInput}
+              onChange={(e) => setDictationInput(e.target.value)}
+              placeholder="Type sentence here as you hear it…"
+              rows={3}
+              disabled={dictationChecked}
+              className="w-full bg-black/40 border border-[color:var(--color-border)] rounded-xl p-3 text-sm focus:outline-none focus:border-[color:var(--color-crimson-glow)]"
+            />
+
+            {!dictationChecked ? (
+              <button
+                onClick={() => setDictationChecked(true)}
+                disabled={!dictationInput.trim()}
+                className="rounded-lg px-5 py-2 border border-[color:var(--color-gold)] text-[color:var(--color-gold)] hover:bg-[color:var(--color-gold)]/10 text-sm font-semibold disabled:opacity-40"
+              >
+                Check Dictation
+              </button>
+            ) : (
+              <div className="space-y-3 text-left border-t border-[color:var(--color-border)] pt-4">
+                <div>
+                  <p className="text-xs label-mono text-muted-foreground">Original Sentence</p>
+                  <p className="text-sm font-medium text-green-400 mt-1">{data.dictationSentence}</p>
+                </div>
+                <div>
+                  <p className="text-xs label-mono text-muted-foreground">Your Guess</p>
+                  <p className="text-sm font-medium text-white mt-1">{dictationInput}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={() => void finishExercise()}
+              disabled={saving}
+              className="btn-crimson rounded-lg px-6 py-2.5 font-semibold text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Complete Exercise"} <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -985,7 +1484,7 @@ function SessionRunner({
   const [dialogueRetryKey, setDialogueRetryKey] = useState(0);
 
   function retryRecording() {
-    if (result) URL.revokeObjectURL(result.url);
+    if (result?.url) URL.revokeObjectURL(result.url);
     setResult(null);
     setElapsed(0);
     setDialogueRetryKey((k) => k + 1);
@@ -1031,7 +1530,7 @@ function SessionRunner({
       let storagePath = result.storagePath;
       let recordingId = result.recordingId;
 
-      if (!storagePath && result.blob.size > 0) {
+      if (!storagePath && result.blob && result.blob.size > 0) {
         const path = `${user.id}/${sessionId}/${crypto.randomUUID()}.webm`;
         const { error: upErr } = await supabase.storage
           .from("fluency-recordings")
@@ -1117,7 +1616,18 @@ function SessionRunner({
         <p className="label-mono text-[color:var(--color-gold)]">{labelType(exercise.type)}</p>
       </div>
 
-      {exercise.type === "dialogue" ? (
+      {exercise.type === "listening" ? (
+        <ListeningRunner
+          exercise={exercise}
+          sessionId={sessionId}
+          sessionTheme={sessionTheme}
+          cefrLevel={cefrLevel}
+          stepIndex={stepIndex}
+          totalSteps={totalSteps}
+          onComplete={onComplete}
+          onBack={handleBack}
+        />
+      ) : exercise.type === "dialogue" ? (
         <InteractiveDialogue
           key={`${exercise.prompt}:${dialogueRetryKey}`}
           openingLine={exercise.prompt}
@@ -1205,7 +1715,7 @@ function SessionRunner({
             {result.url ? (
               <>
                 <audio src={result.url} controls className="w-full" />
-                <PitchContourChart blob={result.blob} />
+                <PitchContourChart blob={result.blob ?? null} />
               </>
             ) : (
               <p className="text-xs text-muted-foreground italic">Text-based dialogue completed without audio stream.</p>
@@ -1682,6 +2192,7 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
 // ---------------------------------------------------------------------------
 
 function labelType(t: ExerciseType) {
+  if (t === "listening") return "Listening Challenge";
   return t === "free_talk" ? "Free Talk" : t === "chunk_repeat" ? "Chunk Repeat" : "Dialogue";
 }
 
