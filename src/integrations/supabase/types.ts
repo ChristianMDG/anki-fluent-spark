@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      book_level_estimates: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          description: string | null
+          estimated_level: string
+          gutenberg_book_id: number
+          id: string
+          word_count: number | null
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_level: string
+          gutenberg_book_id: number
+          id?: string
+          word_count?: number | null
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          description?: string | null
+          estimated_level?: string
+          gutenberg_book_id?: number
+          id?: string
+          word_count?: number | null
+        }
+        Relationships: []
+      }
       cards: {
         Row: {
           card_state: string

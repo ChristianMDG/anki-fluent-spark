@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 
 const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -418,4 +419,160 @@ export const searchGutendex = createServerFn({ method: "POST" })
     const json = (await res.json()) as GutendexResponse;
     return json;
   });
+
+// ---------------------------------------------------------------------------
+// Server function: getOrEstimateBookMetadata
+// Checks cached AI difficulty estimate & plot summary in book_level_estimates,
+// or calls AI Gateway to generate and cache it.
+// ---------------------------------------------------------------------------
+
+const BOOK_ESTIMATE_SYSTEM = `You are a literary difficulty classifier and concise book summary curator for English language learners. Given a classic public-domain book title, author, and optional subjects:
+1. Estimate its English CEFR reading difficulty: "A1", "A2", "B1", "B2", "C1", or "C2".
+2. Assign a confidence rating: "low", "medium", or "high".
+3. Write a short 1-paragraph summary (3-5 sentences) of what the book is about.
+4. Estimate total word count for the full book (e.g., 45000).
+
+CRITICAL CONSTRAINTS:
+- Write the summary in your OWN ORIGINAL words summarizing the plot, setting, and main themes.
+- DO NOT quote or reproduce actual passages, sentences, or substantial text from the book itself.
+- Output ONLY valid JSON, no text before or after:
+{"estimatedLevel": "B2", "confidence": "high", "description": "...", "wordCount": 65000}`;
+
+export interface BookMetadataResult {
+  gutenbergBookId: number;
+  estimatedLevel: "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+  confidence: "low" | "medium" | "high";
+  description: string;
+  wordCount: number;
+}
+
+export const getOrEstimateBookMetadata = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: { bookId: number; title: string; author: string; subjects?: string[] }) =>
+      z
+        .object({
+          bookId: z.number().int().positive(),
+          title: z.string().max(300),
+          author: z.string().max(300),
+          subjects: z.array(z.string()).optional(),
+        })
+        .parse(d),
+  )
+  .handler(async ({ data }): Promise<BookMetadataResult> => {
+    // 1. Check Supabase cache table
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: cached } = await (supabase as any)
+        .from("book_level_estimates")
+        .select("estimated_level, confidence, description, word_count")
+        .eq("gutenberg_book_id", data.bookId)
+        .maybeSingle();
+
+      if (cached && cached.estimated_level && cached.description) {
+        return {
+          gutenbergBookId: data.bookId,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          estimatedLevel: cached.estimated_level as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          confidence: (cached.confidence as any) ?? "medium",
+          description: cached.description,
+          wordCount: cached.word_count ?? 45000,
+        };
+      }
+    } catch {
+      /* fallback to AI generation */
+    }
+
+    // 2. Call AI
+    const userMsg = `Title: "${data.title}"\nAuthor: "${data.author}"${
+      data.subjects?.length ? `\nSubjects: ${data.subjects.slice(0, 5).join(", ")}` : ""
+    }\n\nEstimate level, confidence, 1-paragraph plot description, and word count.`;
+
+    let estLevel: "A1" | "A2" | "B1" | "B2" | "C1" | "C2" = "B2";
+    let conf: "low" | "medium" | "high" = "medium";
+    let desc = `A classic work of English literature by ${data.author}, offering rich storytelling and memorable characters.`;
+    let words = 45000;
+
+    try {
+      const raw = await callAI(BOOK_ESTIMATE_SYSTEM, userMsg, true);
+      const cleaned = raw.replace(/```(?:json)?|```/g, "").trim();
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]) as {
+          estimatedLevel?: string;
+          confidence?: string;
+          description?: string;
+          wordCount?: number;
+        };
+        if (parsed.estimatedLevel && ["A1", "A2", "B1", "B2", "C1", "C2"].includes(parsed.estimatedLevel)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          estLevel = parsed.estimatedLevel as any;
+        }
+        if (parsed.confidence && ["low", "medium", "high"].includes(parsed.confidence)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          conf = parsed.confidence as any;
+        }
+        if (parsed.description && parsed.description.trim().length > 10) {
+          desc = parsed.description.trim();
+        }
+        if (typeof parsed.wordCount === "number" && parsed.wordCount > 500) {
+          words = Math.round(parsed.wordCount);
+        }
+      }
+    } catch {
+      /* fallback defaults */
+    }
+
+    // 3. Cache result in Supabase
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("book_level_estimates").upsert(
+        {
+          gutenberg_book_id: data.bookId,
+          estimated_level: estLevel,
+          confidence: conf,
+          description: desc,
+          word_count: words,
+        },
+        { onConflict: "gutenberg_book_id" },
+      );
+    } catch {
+      /* ignore write error */
+    }
+
+    return {
+      gutenbergBookId: data.bookId,
+      estimatedLevel: estLevel,
+      confidence: conf,
+      description: desc,
+      wordCount: words,
+    };
+  });
+
+export const fetchBatchBookLevels = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: { bookIds: number[] }) =>
+      z.object({ bookIds: z.array(z.number().int().positive()) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    if (data.bookIds.length === 0) return { estimates: {} };
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rows } = await (supabase as any)
+        .from("book_level_estimates")
+        .select("gutenberg_book_id, estimated_level")
+        .in("gutenberg_book_id", data.bookIds);
+
+      const estimates: Record<number, string> = {};
+      for (const row of rows ?? []) {
+        estimates[row.gutenberg_book_id] = row.estimated_level;
+      }
+      return { estimates };
+    } catch {
+      return { estimates: {} };
+    }
+  });
+
 

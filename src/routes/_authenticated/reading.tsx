@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,10 +9,14 @@ import {
   explainWordInContext,
   generateComprehensionCheck,
   searchGutendex,
+  getOrEstimateBookMetadata,
+  fetchBatchBookLevels,
   type ComprehensionQuestion,
   type GutendexBook,
   type GutendexResponse,
+  type BookMetadataResult,
 } from "@/lib/reading.functions";
+import { CEFR_LEVELS, type CefrLevel } from "@/integrations/supabase/learner-profile.types";
 import { generateVocabCard } from "@/lib/vocab.functions";
 import {
   Search,
@@ -150,9 +154,10 @@ function ReadingPage() {
 interface BookCardProps {
   book: GutendexBook;
   onClick: (book: GutendexBook) => void;
+  estimatedLevel?: string;
 }
 
-function BookCard({ book, onClick }: BookCardProps) {
+function BookCard({ book, onClick, estimatedLevel }: BookCardProps) {
   const cover = getBookCover(book);
   const authors = getBookAuthors(book);
   const hasText = !!getBookTextUrl(book);
@@ -162,13 +167,23 @@ function BookCard({ book, onClick }: BookCardProps) {
       id={`book-card-${book.id}`}
       onClick={() => onClick(book)}
       disabled={!hasText}
-      className={`group glass-panel-soft p-0 overflow-hidden text-left flex flex-col transition-all duration-300 rounded-2xl ${
+      className={`group glass-panel-soft p-0 overflow-hidden text-left flex flex-col transition-all duration-300 rounded-2xl relative ${
         hasText
           ? "hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(237,28,36,0.2)] hover:border-[var(--color-crimson)]/50 cursor-pointer"
           : "opacity-50 cursor-not-allowed"
       }`}
       title={!hasText ? "No readable text available for this book" : book.title}
     >
+      {/* Level badge */}
+      {estimatedLevel && (
+        <span
+          className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-black/70 border border-amber-400/40 text-amber-300 shadow backdrop-blur-sm"
+          title="AI estimated reading difficulty"
+        >
+          ≈ {estimatedLevel}
+        </span>
+      )}
+
       {/* Cover */}
       <div className="w-full aspect-[2/3] bg-black/40 overflow-hidden flex-shrink-0 relative">
         {cover ? (
@@ -204,10 +219,144 @@ function BookCard({ book, onClick }: BookCardProps) {
   );
 }
 
+function BookPreviewModal({
+  book,
+  onClose,
+  onStartReading,
+}: {
+  book: GutendexBook;
+  onClose: () => void;
+  onStartReading: (book: GutendexBook) => void;
+}) {
+  const getMetadataFn = useServerFn(getOrEstimateBookMetadata);
+  const authors = getBookAuthors(book);
+  const cover = getBookCover(book);
+
+  const { data: metadata, isLoading } = useQuery({
+    queryKey: ["book-metadata-preview", book.id],
+    queryFn: async (): Promise<BookMetadataResult> => {
+      return getMetadataFn({
+        data: {
+          bookId: book.id,
+          title: book.title,
+          author: authors,
+          subjects: book.subjects,
+        },
+      });
+    },
+    staleTime: 10 * 60_000,
+  });
+
+  const estimatedPages = metadata?.wordCount
+    ? Math.max(1, Math.round(metadata.wordCount / 260))
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="glass-panel max-w-xl w-full p-6 border-amber-500/30 rounded-3xl space-y-6 relative shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-white rounded-full hover:bg-white/10 transition cursor-pointer"
+          aria-label="Close preview"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="flex flex-col sm:flex-row gap-5 items-start">
+          {/* Cover */}
+          <div className="w-28 sm:w-36 aspect-[2/3] bg-black/40 rounded-xl overflow-hidden shrink-0 border border-white/10 shadow-lg">
+            {cover ? (
+              <img src={cover} alt={book.title} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                <BookOpen size={32} className="text-amber-500/40" />
+              </div>
+            )}
+          </div>
+
+          {/* Book Header details */}
+          <div className="flex-1 space-y-2 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/20 border border-amber-400/40 text-amber-300">
+                ≈ {metadata?.estimatedLevel ?? "B1"}
+              </span>
+              <span className="text-[11px] text-neutral-400 italic">
+                (AI estimate, confidence: {metadata?.confidence ?? "medium"})
+              </span>
+            </div>
+
+            <h2 className="text-xl font-bold text-white leading-snug">{book.title}</h2>
+            <p className="text-xs text-neutral-300 font-medium">{authors}</p>
+            <p className="label-mono text-[10px] text-neutral-400">
+              {book.download_count.toLocaleString()} Gutenberg downloads
+            </p>
+          </div>
+        </div>
+
+        {/* AI Plot Description */}
+        <div className="space-y-2 border-t border-white/10 pt-4">
+          <p className="label-mono text-xs text-amber-300 flex items-center gap-1.5">
+            <Sparkles size={14} /> About this book
+          </p>
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-neutral-400 py-3">
+              <Loader2 size={14} className="animate-spin text-amber-400" />
+              Analyzing book topics & estimating length…
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-300 leading-relaxed font-serif">
+              {metadata?.description ?? "A classic work of literature from Project Gutenberg."}
+            </p>
+          )}
+        </div>
+
+        {/* Length & Actions */}
+        <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-4 flex-wrap">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-neutral-400 font-mono">Estimated Length</p>
+            <p className="text-xs font-semibold text-white mt-0.5">
+              {metadata?.wordCount
+                ? `~${metadata.wordCount.toLocaleString()} words (${estimatedPages} pages)`
+                : "Standard book length"}
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl text-xs border border-white/15 text-neutral-300 hover:text-white hover:bg-white/5 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                onClose();
+                onStartReading(book);
+              }}
+              className="btn-crimson px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg cursor-pointer"
+            >
+              <BookOpen size={14} /> Start Reading
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => void }) {
-  const level = useCurrentLevel();
+  const userLevel = useCurrentLevel();
+  const [selectedLevel, setSelectedLevel] = useState<string>("B1");
+  const [previewBook, setPreviewBook] = useState<GutendexBook | null>(null);
+
+  useEffect(() => {
+    if (userLevel) setSelectedLevel(userLevel);
+  }, [userLevel]);
+
   const suggestFn = useServerFn(suggestBooksForLevel);
   const searchGutendexFn = useServerFn(searchGutendex);
+  const fetchBatchLevelsFn = useServerFn(fetchBatchBookLevels);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -228,11 +377,13 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
     };
   }, []);
 
-  // AI suggestions → resolved through Gutendex server function
+  // AI suggestions → resolved through Gutendex server function for selectedLevel
   const suggestionsQuery = useQuery({
-    queryKey: ["book-suggestions", level],
+    queryKey: ["book-suggestions", selectedLevel],
     queryFn: async (): Promise<GutendexBook[]> => {
-      const { suggestions } = await suggestFn({ data: { level } });
+      const { suggestions } = await suggestFn({
+        data: { level: selectedLevel as "A1" | "A2" | "B1" | "B2" | "C1" | "C2" },
+      });
       if (!suggestions.length) return [];
 
       // Resolve each suggestion through Gutendex (parallel, max 8)
@@ -240,7 +391,6 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
         suggestions.slice(0, 8).map(async (s) => {
           const query = `${s.title} ${s.author}`;
           const res = await searchGutendexFn({ data: { query, page: 1 } });
-          // Take first result that has a text URL
           const match = res.results.find((b) => getBookTextUrl(b));
           return match ?? null;
         }),
@@ -253,7 +403,7 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
         )
         .map((r) => r.value);
     },
-    staleTime: 5 * 60_000, // 5 minutes
+    staleTime: 5 * 60_000,
   });
 
   // Search results (only when query present)
@@ -268,8 +418,27 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
     staleTime: 60_000,
   });
 
-  const isSearching = !!debouncedQuery.trim();
+  // Batch difficulty lookup for displayed books
+  const allDisplayedIds = useMemo(() => {
+    const list = debouncedQuery.trim()
+      ? searchResultsQuery.data ?? []
+      : suggestionsQuery.data ?? [];
+    return list.map((b) => b.id);
+  }, [debouncedQuery, searchResultsQuery.data, suggestionsQuery.data]);
 
+  const batchLevelsQuery = useQuery({
+    queryKey: ["batch-book-levels", allDisplayedIds],
+    queryFn: async () => {
+      if (!allDisplayedIds.length) return {};
+      const { estimates } = await fetchBatchLevelsFn({ data: { bookIds: allDisplayedIds } });
+      return estimates;
+    },
+    enabled: allDisplayedIds.length > 0,
+    staleTime: 10 * 60_000,
+  });
+
+  const levelMap = batchLevelsQuery.data ?? {};
+  const isSearching = !!debouncedQuery.trim();
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -283,6 +452,29 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
         </p>
       </div>
 
+      {/* CEFR Level Filter Pills */}
+      <div className="space-y-2">
+        <label className="label-mono text-neutral-400 text-xs block">Filter books by CEFR Level</label>
+        <div className="flex flex-wrap gap-2">
+          {CEFR_LEVELS.map((lvl) => {
+            const active = selectedLevel === lvl;
+            return (
+              <button
+                key={lvl}
+                onClick={() => setSelectedLevel(lvl)}
+                className={`px-4 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer ${
+                  active
+                    ? "border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/20 text-white shadow-[0_0_12px_rgba(237,28,36,0.3)] scale-105"
+                    : "border-[color:var(--color-border)] text-neutral-400 hover:border-white/30 hover:text-white"
+                }`}
+              >
+                {lvl}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Search */}
       <div className="relative">
         <Search
@@ -294,8 +486,8 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
           type="search"
           value={searchQuery}
           onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search by title, author, or keyword…"
-          className="w-full bg-black/40 border border-[var(--color-border)]/60 rounded-2xl pl-12 pr-5 py-3.5 text-white placeholder-neutral-500 focus:outline-none focus:border-[var(--color-crimson)]/60 focus:ring-1 focus:ring-[var(--color-crimson)]/30 transition-all"
+          placeholder={`Search classics by title, author, or keyword (filtered for ${selectedLevel})…`}
+          className="w-full bg-black/40 border border-[var(--color-border)]/60 rounded-2xl pl-12 pr-5 py-3.5 text-white placeholder-neutral-500 focus:outline-none focus:border-[var(--color-crimson)]/60 focus:ring-1 focus:ring-[var(--color-crimson)]/30 transition-all text-sm"
         />
         {searchQuery && (
           <button
@@ -337,7 +529,12 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
           {searchResultsQuery.data && searchResultsQuery.data.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {searchResultsQuery.data.map((book) => (
-                <BookCard key={book.id} book={book} onClick={onSelectBook} />
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  onClick={(b) => setPreviewBook(b)}
+                  estimatedLevel={levelMap[book.id]}
+                />
               ))}
             </div>
           )}
@@ -350,8 +547,8 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
           <div className="flex items-center gap-3 mb-4">
             <Sparkles size={16} className="text-[var(--color-gold)]" />
             <h2 className="text-lg font-semibold">
-              Suggested for you{" "}
-              <span className="label-mono text-[var(--color-gold)] ml-2">{level}</span>
+              Suggested for level{" "}
+              <span className="label-mono text-[var(--color-gold)] ml-2">{selectedLevel}</span>
             </h2>
             {suggestionsQuery.isLoading && (
               <Loader2 size={16} className="animate-spin text-neutral-400" />
@@ -361,20 +558,25 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
           {suggestionsQuery.isError && (
             <div className="flex items-center gap-2 text-sm text-red-400 py-4">
               <AlertCircle size={16} />
-              Could not load suggestions.
+              Could not load suggestions for {selectedLevel}.
             </div>
           )}
 
           {suggestionsQuery.data && suggestionsQuery.data.length === 0 && !suggestionsQuery.isLoading && (
             <p className="text-muted-foreground text-sm py-4">
-              No suggestions available right now. Try searching for a title you know.
+              No suggestions available for {selectedLevel} right now. Try searching for a title.
             </p>
           )}
 
           {suggestionsQuery.data && suggestionsQuery.data.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {suggestionsQuery.data.map((book) => (
-                <BookCard key={book.id} book={book} onClick={onSelectBook} />
+                <BookCard
+                  key={book.id}
+                  book={book}
+                  onClick={(b) => setPreviewBook(b)}
+                  estimatedLevel={levelMap[book.id] ?? selectedLevel}
+                />
               ))}
             </div>
           )}
@@ -394,6 +596,18 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
             </div>
           )}
         </section>
+      )}
+
+      {/* Book Preview Modal */}
+      {previewBook && (
+        <BookPreviewModal
+          book={previewBook}
+          onClose={() => setPreviewBook(null)}
+          onStartReading={(b) => {
+            setPreviewBook(null);
+            onSelectBook(b);
+          }}
+        />
       )}
 
       {/* Attribution */}
@@ -639,10 +853,37 @@ function searchBookText(pages: string[], query: string): SearchResultItem[] {
 }
 
 // ---------------------------------------------------------------------------
-// Text pagination helper — splits full text into ~300 word book pages
+// Text pagination helper — dynamic page fitting based on typography & device
 // ---------------------------------------------------------------------------
 
-function paginateTextIntoPages(fullText: string): string[] {
+function computeTargetWordsPerPage(
+  fontSizeStep: FontSizeStep,
+  lineSpacing: LineSpacingOption,
+  isMobile: boolean
+): number {
+  const fontMultipliers: Record<FontSizeStep, number> = {
+    S: 1.35,
+    M: 1.0,
+    L: 0.72,
+    XL: 0.52,
+  };
+  const spacingMultipliers: Record<LineSpacingOption, number> = {
+    compact: 1.15,
+    comfortable: 1.0,
+    spacious: 0.82,
+  };
+
+  const baseWords = 180;
+  const words = Math.round(
+    baseWords *
+      (fontMultipliers[fontSizeStep] ?? 1.0) *
+      (spacingMultipliers[lineSpacing] ?? 1.0) *
+      (isMobile ? 0.75 : 1.0)
+  );
+  return Math.max(40, words);
+}
+
+function paginateTextIntoPages(fullText: string, targetWordsPerPage: number = 180): string[] {
   let text = fullText;
 
   // Strip Gutenberg legal preamble/postamble header lines if present to start directly at Chapter 1
@@ -663,17 +904,17 @@ function paginateTextIntoPages(fullText: string): string[] {
   const pages: string[] = [];
   let currentParas: string[] = [];
   let currentWords = 0;
-  const TARGET_WORDS_PER_PAGE = 260; // Clean physical book size (~260 words per page)
+  const minWords = Math.min(60, Math.floor(targetWordsPerPage * 0.4));
 
   for (const para of rawParagraphs) {
     const paraWords = para.split(/\s+/).length;
 
     // If single paragraph is longer than target page length, break into sentence blocks
-    if (paraWords > TARGET_WORDS_PER_PAGE) {
+    if (paraWords > targetWordsPerPage) {
       const sentences = para.match(/[^.!?]+[.!?]+(\s+|$)/g) || [para];
       for (const sentence of sentences) {
         const sentenceWords = sentence.split(/\s+/).length;
-        if (currentWords + sentenceWords > TARGET_WORDS_PER_PAGE && currentWords >= 120) {
+        if (currentWords + sentenceWords > targetWordsPerPage && currentWords >= minWords) {
           pages.push(currentParas.join("\n\n"));
           currentParas = [sentence.trim()];
           currentWords = sentenceWords;
@@ -683,7 +924,7 @@ function paginateTextIntoPages(fullText: string): string[] {
         }
       }
     } else {
-      if (currentWords + paraWords > TARGET_WORDS_PER_PAGE && currentWords >= 120) {
+      if (currentWords + paraWords > targetWordsPerPage && currentWords >= minWords) {
         pages.push(currentParas.join("\n\n"));
         currentParas = [para];
         currentWords = paraWords;
@@ -709,6 +950,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const comprehensionFn = useServerFn(generateComprehensionCheck);
   const generateCardFn = useServerFn(generateVocabCard);
 
+  const [rawFullText, setRawFullText] = useState<string>("");
   const [pages, setPages] = useState<string[]>([]);
   const [pageIndex, setPageIndex] = useState<number>(0);
   const [loadingText, setLoadingText] = useState(true);
@@ -1009,7 +1251,10 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         if (cancelled) return;
 
         const fullText = result.chunks.join("\n\n");
-        const bookPages = paginateTextIntoPages(fullText);
+        setRawFullText(fullText);
+
+        const targetWords = computeTargetWordsPerPage(fontSizeStep, lineSpacing, isMobile);
+        const bookPages = paginateTextIntoPages(fullText, targetWords);
         setPages(bookPages);
 
         const savedIdx = await loadProgress();
@@ -1026,6 +1271,31 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book.id, textUrl]);
+
+  // Dynamic re-pagination on typography/screen resize
+  const prevSettingsRef = useRef({ fontSizeStep, lineSpacing, isMobile });
+  useEffect(() => {
+    if (!rawFullText) return;
+    const prev = prevSettingsRef.current;
+    if (
+      prev.fontSizeStep === fontSizeStep &&
+      prev.lineSpacing === lineSpacing &&
+      prev.isMobile === isMobile
+    ) {
+      return;
+    }
+    prevSettingsRef.current = { fontSizeStep, lineSpacing, isMobile };
+
+    const targetWords = computeTargetWordsPerPage(fontSizeStep, lineSpacing, isMobile);
+    const newPages = paginateTextIntoPages(rawFullText, targetWords);
+
+    if (pages.length > 0) {
+      const ratio = pageIndex / Math.max(1, pages.length);
+      const newIdx = Math.min(newPages.length - 1, Math.max(0, Math.floor(ratio * newPages.length)));
+      setPageIndex(newIdx);
+    }
+    setPages(newPages);
+  }, [rawFullText, fontSizeStep, lineSpacing, isMobile, pages.length, pageIndex]);
 
   // Scroll to top whenever page changes
   useEffect(() => {
@@ -1949,7 +2219,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
               {/* Page Body */}
               <div
                 id="reader-text-content"
-                className={`prose-reader ${currentFont.cssClass} flex-1`}
+                className={`prose-reader ${currentFont.cssClass} flex-1 overflow-hidden`}
                 style={{
                   fontSize: `${fontSize}px`,
                   lineHeight: lineHeightStr,
@@ -2058,7 +2328,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
                 {/* Page Body */}
                 <div
-                  className={`prose-reader ${currentFont.cssClass} flex-1`}
+                  className={`prose-reader ${currentFont.cssClass} flex-1 overflow-hidden`}
                   style={{
                     fontSize: `${fontSize}px`,
                     lineHeight: lineHeightStr,
