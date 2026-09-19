@@ -280,6 +280,36 @@ export type Database = {
           },
         ]
       }
+      grammar_error_patterns: {
+        Row: {
+          created_at: string
+          id: string
+          last_seen_at: string
+          occurrences: number
+          pattern_tag: string
+          resolved: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          occurrences?: number
+          pattern_tag: string
+          resolved?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          occurrences?: number
+          pattern_tag?: string
+          resolved?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       journey_cells: {
         Row: {
           complexity_level: number

@@ -9,8 +9,14 @@ import {
   generateUsageChoice,
   generateErrorCorrection,
   checkCorrection,
+  generateTransformation,
+  checkTransformation,
   generateDailyContext,
+  generateMultiWordContext,
   evaluateFreeSentence,
+  evaluateFreeParagraph,
+  extractGrammarPattern,
+  type HighlightedSegment,
 } from "@/lib/grammar.functions";
 import {
   CEFR_LEVELS,
@@ -30,6 +36,8 @@ import {
   AlertTriangle,
   Send,
   BookOpen,
+  Check,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,26 +46,43 @@ export const Route = createFileRoute("/_authenticated/grammar")({
   component: GrammarPage,
 });
 
-type ExerciseType = "fill_in_blank" | "usage_choice" | "error_correction" | "free_construction";
+type ExerciseType =
+  | "fill_in_blank"
+  | "usage_choice"
+  | "error_correction"
+  | "sentence_transformation"
+  | "free_construction";
 type SessionLength = 5 | 10 | 15;
 
 const EXERCISE_NAMES: Record<ExerciseType, string> = {
   fill_in_blank: "Fill in the Blank",
   usage_choice: "Usage Choice",
   error_correction: "Error Correction",
+  sentence_transformation: "Sentence Transformation",
   free_construction: "Free Construction",
 };
 
 interface ExerciseItem {
   card: CardRow;
   type: ExerciseType;
+  extraCards?: CardRow[];
+  focusPattern?: string;
 }
 
 interface ScoreTracker {
   fill_in_blank: { correct: number; total: number };
   usage_choice: { correct: number; total: number };
   error_correction: { correct: number; total: number };
+  sentence_transformation: { correct: number; total: number };
   free_construction: { reviewed: number };
+}
+
+interface GrammarErrorPattern {
+  id: string;
+  pattern_tag: string;
+  occurrences: number;
+  last_seen_at: string;
+  resolved: boolean;
 }
 
 // Helper to shuffle an array
@@ -170,6 +195,35 @@ function useLearnerProfile() {
 }
 
 // ---------------------------------------------------------------------------
+// Error Highlighting Component
+// ---------------------------------------------------------------------------
+
+function RenderHighlightedAnswer({ segments }: { segments?: HighlightedSegment[] }) {
+  if (!segments || segments.length === 0) return null;
+  return (
+    <div className="p-3.5 rounded-xl bg-black/50 border border-white/10 text-xs leading-relaxed space-y-1 mt-2">
+      <span className="text-[10px] label-mono text-neutral-400 block uppercase tracking-wider">
+        Your Response Error Analysis:
+      </span>
+      <div className="text-sm font-medium">
+        {segments.map((seg, idx) =>
+          seg.isError ? (
+            <mark
+              key={idx}
+              className="bg-red-500/25 text-red-200 border-b-2 border-red-500 font-semibold px-1 py-0.5 rounded-sm mx-0.5"
+            >
+              {seg.text}
+            </mark>
+          ) : (
+            <span key={idx}>{seg.text}</span>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component Page
 // ---------------------------------------------------------------------------
 
@@ -184,12 +238,51 @@ function GrammarPage() {
     fill_in_blank: { correct: 0, total: 0 },
     usage_choice: { correct: 0, total: 0 },
     error_correction: { correct: 0, total: 0 },
+    sentence_transformation: { correct: 0, total: 0 },
     free_construction: { reviewed: 0 },
   });
 
   const qc = useQueryClient();
   const { profile, setLevel, isLoading: profileLoading } = useLearnerProfile();
   const cefrLevel = profile?.current_level ?? "B1";
+
+  // Query top unresolved error patterns
+  const { data: topErrorPatterns = [] } = useQuery({
+    queryKey: ["grammar-error-patterns"],
+    queryFn: async (): Promise<GrammarErrorPattern[]> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await (supabase as unknown as {
+        from: (t: string) => {
+          select: (c: string) => {
+            eq: (col: string, val: string) => {
+              eq: (col: string, val: boolean) => {
+                order: (col: string, opts: Record<string, unknown>) => {
+                  order: (col: string, opts: Record<string, unknown>) => {
+                    limit: (n: number) => Promise<{ data: GrammarErrorPattern[] | null; error: unknown }>;
+                  };
+                };
+              };
+            };
+          };
+        };
+      })
+        .from("grammar_error_patterns")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("resolved", false)
+        .order("occurrences", { ascending: false })
+        .order("last_seen_at", { ascending: false })
+        .limit(2);
+
+      if (error) return [];
+      return (data as GrammarErrorPattern[]) ?? [];
+    },
+    staleTime: 10_000,
+  });
 
   // Query words ready for grammar practice
   const { data: readyCount = 0, isLoading: countLoading } = useQuery({
@@ -203,11 +296,26 @@ function GrammarPage() {
     },
   });
 
+  async function handleResolvePattern(id: string) {
+    await (supabase as unknown as {
+      from: (t: string) => {
+        update: (vals: Record<string, unknown>) => {
+          eq: (col: string, val: string) => Promise<{ error: unknown }>;
+        };
+      };
+    })
+      .from("grammar_error_patterns")
+      .update({ resolved: true })
+      .eq("id", id);
+
+    qc.invalidateQueries({ queryKey: ["grammar-error-patterns"] });
+    toast.success("Marked error pattern as resolved!");
+  }
+
   async function handleStartSession() {
     setIsStarting(true);
     try {
       // Prioritize: needs_review = true cards first, then least-recently-drilled cards (nulls first), then created_at desc
-      // Cast required because generated Supabase types don't yet include last_grammar_drill_at.
       const db = supabase as unknown as {
         from: (table: string) => {
           select: (cols: string) => {
@@ -241,13 +349,31 @@ function GrammarPage() {
         "fill_in_blank",
         "usage_choice",
         "error_correction",
+        "sentence_transformation",
         "free_construction",
       ];
 
-      const queue: ExerciseItem[] = cards.map((card, idx) => ({
-        card,
-        type: typesRotation[idx % typesRotation.length],
-      }));
+      const focusPattern = topErrorPatterns[0]?.pattern_tag;
+
+      const queue: ExerciseItem[] = cards.map((card, idx) => {
+        const type = typesRotation[idx % typesRotation.length];
+        let extraCards: CardRow[] | undefined;
+
+        // Occasional mini-paragraph turn for free_construction (e.g. 4th item or if cards available)
+        if (type === "free_construction" && (idx % 3 === 0 || cards.length >= 3)) {
+          const pool = cards.filter((c) => c.id !== card.id);
+          if (pool.length >= 1) {
+            extraCards = pool.slice(0, Math.min(2, pool.length));
+          }
+        }
+
+        return {
+          card,
+          type,
+          extraCards,
+          focusPattern,
+        };
+      });
 
       setExerciseQueue(queue);
       setStep(0);
@@ -255,6 +381,7 @@ function GrammarPage() {
         fill_in_blank: { correct: 0, total: 0 },
         usage_choice: { correct: 0, total: 0 },
         error_correction: { correct: 0, total: 0 },
+        sentence_transformation: { correct: 0, total: 0 },
         free_construction: { reviewed: 0 },
       });
       setPhase("session");
@@ -283,7 +410,6 @@ function GrammarPage() {
 
   async function handleNextExercise(item: ExerciseItem, isCorrect: boolean) {
     // 1. Update last_grammar_drill_at timestamp
-    // Cast required because the Supabase generated types don't yet include last_grammar_drill_at.
     const nowIso = new Date().toISOString();
     await (supabase as unknown as {
       from: (table: string) => {
@@ -328,9 +454,38 @@ function GrammarPage() {
           <h1 className="text-3xl md:text-4xl font-bold mt-1">Master your vocabulary in context.</h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
             A focused exercise system designed to turn passive words into active language skills.
-            Practice realistic daily-life usage through 4 guided exercise types.
+            Practice realistic daily-life usage through 5 guided exercise types and mini-paragraph challenges.
           </p>
         </div>
+
+        {/* Error Pattern Coaching Banner (if any unresolved patterns exist) */}
+        {topErrorPatterns.length > 0 && (
+          <div className="glass-panel p-5 border-l-4 border-l-amber-500 bg-amber-950/20 backdrop-blur-md border border-amber-500/30 rounded-2xl space-y-3 shadow-lg">
+            <div className="flex items-center gap-2 text-amber-400 font-audiowide text-xs uppercase tracking-wider">
+              <Zap size={15} /> Working On Target Grammar Patterns
+            </div>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {topErrorPatterns.map((pat) => (
+                <div
+                  key={pat.id}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/40 border border-amber-500/40 text-xs text-neutral-200"
+                >
+                  <span>
+                    Focus: <strong className="text-amber-300 font-semibold">{pat.pattern_tag}</strong>{" "}
+                    <span className="text-[10px] text-neutral-400">({pat.occurrences}×)</span>
+                  </span>
+                  <button
+                    onClick={() => handleResolvePattern(pat.id)}
+                    className="ml-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-lg border border-emerald-500/30 transition flex items-center gap-1"
+                    title="Mark as resolved"
+                  >
+                    <Check size={12} /> Resolved
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Level & Readiness Panel */}
         <div className="glass-panel p-6 md:p-8 space-y-6">
@@ -378,7 +533,7 @@ function GrammarPage() {
 
             <div className="text-right">
               <p className="label-mono">Exercise Variety</p>
-              <p className="text-xs text-neutral-400 mt-1">4 rotating exercise types per session</p>
+              <p className="text-xs text-neutral-400 mt-1">5 rotating exercise types + mini-paragraphs</p>
             </div>
           </div>
         </div>
@@ -451,13 +606,15 @@ function GrammarPage() {
               <RotateCcw size={16} />
             </button>
             <span className="font-audiowide text-xs font-bold uppercase tracking-wider text-[var(--color-gold)]">
-              {EXERCISE_NAMES[currentItem.type]}
+              {currentItem.extraCards
+                ? "Mini-Paragraph Challenge"
+                : EXERCISE_NAMES[currentItem.type]}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
             <span className="label-mono text-xs text-neutral-300">
-              Word <span className="text-white font-bold">{step + 1}</span> of {exerciseQueue.length}
+              Item <span className="text-white font-bold">{step + 1}</span> of {exerciseQueue.length}
             </span>
             <div className="w-20 bg-white/10 rounded-full h-2 overflow-hidden">
               <div
@@ -502,26 +659,31 @@ function GrammarPage() {
           </div>
 
           {/* Breakdown Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-left">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 pt-2 text-left">
             <SummaryTypeCard
-              label="Fill in Blank"
+              label="Fill Blank"
               correct={scores.fill_in_blank.correct}
               total={scores.fill_in_blank.total}
             />
             <SummaryTypeCard
-              label="Usage Choice"
+              label="Choice"
               correct={scores.usage_choice.correct}
               total={scores.usage_choice.total}
             />
             <SummaryTypeCard
-              label="Error Correct"
+              label="Correct"
               correct={scores.error_correction.correct}
               total={scores.error_correction.total}
             />
-            <div className="glass-panel p-4 rounded-xl border border-white/10 space-y-1">
-              <p className="label-mono text-[9px] text-neutral-400 uppercase">Free Construction</p>
-              <div className="text-xl font-black text-white">
-                {scores.free_construction.reviewed} <span className="text-xs font-normal text-neutral-400">reviewed</span>
+            <SummaryTypeCard
+              label="Transform"
+              correct={scores.sentence_transformation.correct}
+              total={scores.sentence_transformation.total}
+            />
+            <div className="glass-panel p-3.5 rounded-xl border border-white/10 space-y-1">
+              <p className="label-mono text-[9px] text-neutral-400 uppercase">Free Build</p>
+              <div className="text-lg font-black text-white">
+                {scores.free_construction.reviewed} <span className="text-xs font-normal text-neutral-400">done</span>
               </div>
             </div>
           </div>
@@ -554,18 +716,18 @@ function GrammarPage() {
 function SummaryTypeCard({ label, correct, total }: { label: string; correct: number; total: number }) {
   if (total === 0) {
     return (
-      <div className="glass-panel p-4 rounded-xl border border-white/10 space-y-1 opacity-60">
+      <div className="glass-panel p-3.5 rounded-xl border border-white/10 space-y-1 opacity-60">
         <p className="label-mono text-[9px] text-neutral-400 uppercase">{label}</p>
-        <div className="text-xl font-black text-neutral-400">—</div>
+        <div className="text-lg font-black text-neutral-400">—</div>
       </div>
     );
   }
   const pct = Math.round((correct / total) * 100);
   return (
-    <div className="glass-panel p-4 rounded-xl border border-white/10 space-y-1">
+    <div className="glass-panel p-3.5 rounded-xl border border-white/10 space-y-1">
       <p className="label-mono text-[9px] text-neutral-400 uppercase">{label}</p>
-      <div className="text-xl font-black text-white">
-        {correct}/{total} <span className="text-xs font-mono text-[var(--color-gold)]">({pct}%)</span>
+      <div className="text-lg font-black text-white">
+        {correct}/{total} <span className="text-[10px] font-mono text-[var(--color-gold)]">({pct}%)</span>
       </div>
     </div>
   );
@@ -586,15 +748,24 @@ function ExerciseRunner({
   onResult: (isCorrect: boolean) => void;
   onNext: (isCorrect: boolean) => void;
 }) {
-  const { card, type } = item;
+  const { card, type, extraCards, focusPattern } = item;
+  const allCards = [card, ...(extraCards ?? [])];
 
   return (
     <div className="glass-panel p-6 md:p-8 space-y-6">
       {/* Target Word Header Banner */}
       <div className="flex items-center justify-between border-b border-white/10 pb-4">
         <div>
-          <span className="label-mono text-[9px] text-neutral-400 uppercase">Target Word</span>
-          <h2 className="text-2xl font-bold text-white mt-0.5">{card.word}</h2>
+          <span className="label-mono text-[9px] text-neutral-400 uppercase">
+            {allCards.length > 1 ? "Target Vocabulary Words" : "Target Word"}
+          </span>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            {allCards.map((c) => (
+              <span key={c.id} className="text-xl md:text-2xl font-bold text-white">
+                {c.word}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="text-right">
           {card.level && (
@@ -615,13 +786,41 @@ function ExerciseRunner({
         <FillInBlankExercise card={card} onResult={onResult} onNext={onNext} />
       )}
       {type === "usage_choice" && (
-        <UsageChoiceExercise card={card} cefrLevel={cefrLevel} onResult={onResult} onNext={onNext} />
+        <UsageChoiceExercise
+          card={card}
+          cefrLevel={cefrLevel}
+          focusPattern={focusPattern}
+          onResult={onResult}
+          onNext={onNext}
+        />
       )}
       {type === "error_correction" && (
-        <ErrorCorrectionExercise card={card} cefrLevel={cefrLevel} onResult={onResult} onNext={onNext} />
+        <ErrorCorrectionExercise
+          card={card}
+          cefrLevel={cefrLevel}
+          focusPattern={focusPattern}
+          onResult={onResult}
+          onNext={onNext}
+        />
+      )}
+      {type === "sentence_transformation" && (
+        <SentenceTransformationExercise
+          card={card}
+          cefrLevel={cefrLevel}
+          focusPattern={focusPattern}
+          onResult={onResult}
+          onNext={onNext}
+        />
       )}
       {type === "free_construction" && (
-        <FreeConstructionExercise card={card} cefrLevel={cefrLevel} onResult={onResult} onNext={onNext} />
+        <FreeConstructionExercise
+          card={card}
+          extraCards={extraCards}
+          cefrLevel={cefrLevel}
+          focusPattern={focusPattern}
+          onResult={onResult}
+          onNext={onNext}
+        />
       )}
     </div>
   );
@@ -744,11 +943,13 @@ function FillInBlankExercise({
 function UsageChoiceExercise({
   card,
   cefrLevel,
+  focusPattern,
   onResult,
   onNext,
 }: {
   card: CardRow;
   cefrLevel: CefrLevel;
+  focusPattern?: string;
   onResult: (isCorrect: boolean) => void;
   onNext: (isCorrect: boolean) => void;
 }) {
@@ -770,10 +971,10 @@ function UsageChoiceExercise({
             word: card.word,
             definition: card.definition ?? "",
             level: cefrLevel,
+            focusPattern,
           },
         });
         if (active) {
-          // Shuffle sentences client-side before display
           setOptions(shuffleArray(res.sentences));
         }
       } catch (err) {
@@ -792,7 +993,7 @@ function UsageChoiceExercise({
     return () => {
       active = false;
     };
-  }, [card.word, card.definition, cefrLevel, getChoiceFn]);
+  }, [card.word, card.definition, cefrLevel, focusPattern, getChoiceFn]);
 
   function handleSelect(idx: number) {
     if (submitted) return;
@@ -873,7 +1074,7 @@ function UsageChoiceExercise({
             onClick={() => onNext(isCorrect)}
             className="w-full btn-crimson rounded-xl py-3 text-xs font-audiowide uppercase tracking-wider flex items-center justify-center gap-2"
           >
-            <span>Next Word</span>
+            <span>Next Exercise</span>
             <ArrowRight size={14} />
           </button>
         </div>
@@ -889,16 +1090,19 @@ function UsageChoiceExercise({
 function ErrorCorrectionExercise({
   card,
   cefrLevel,
+  focusPattern,
   onResult,
   onNext,
 }: {
   card: CardRow;
   cefrLevel: CefrLevel;
+  focusPattern?: string;
   onResult: (isCorrect: boolean) => void;
   onNext: (isCorrect: boolean) => void;
 }) {
   const getErrorFn = useServerFn(generateErrorCorrection);
   const checkCorrectionFn = useServerFn(checkCorrection);
+  const extractPatternFn = useServerFn(extractGrammarPattern);
 
   const [loading, setLoading] = useState(true);
   const [exerciseData, setExerciseData] = useState<{
@@ -909,7 +1113,11 @@ function ErrorCorrectionExercise({
 
   const [learnerAnswer, setLearnerAnswer] = useState("");
   const [checking, setChecking] = useState(false);
-  const [evaluation, setEvaluation] = useState<{ isCorrect: boolean; feedback: string } | null>(null);
+  const [evaluation, setEvaluation] = useState<{
+    isCorrect: boolean;
+    feedback: string;
+    highlightedAnswer?: HighlightedSegment[];
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -921,6 +1129,7 @@ function ErrorCorrectionExercise({
             word: card.word,
             definition: card.definition ?? "",
             level: cefrLevel,
+            focusPattern,
           },
         });
         if (active) {
@@ -944,7 +1153,7 @@ function ErrorCorrectionExercise({
     return () => {
       active = false;
     };
-  }, [card.word, card.definition, cefrLevel, getErrorFn]);
+  }, [card.word, card.definition, cefrLevel, focusPattern, getErrorFn]);
 
   async function handleCheck(e: React.FormEvent) {
     e.preventDefault();
@@ -961,7 +1170,16 @@ function ErrorCorrectionExercise({
       });
       setEvaluation(res);
       onResult(res.isCorrect);
-    } catch (err) {
+
+      // Silent background pattern tracking if incorrect
+      if (!res.isCorrect) {
+        extractPatternFn({
+          data: {
+            feedbackOrErrorType: `${exerciseData.errorType}: ${res.feedback}`,
+          },
+        }).catch(() => {});
+      }
+    } catch {
       const fallbackCorrect =
         learnerAnswer.trim().toLowerCase() === exerciseData.correctSentence.trim().toLowerCase();
       const res = {
@@ -969,6 +1187,9 @@ function ErrorCorrectionExercise({
         feedback: fallbackCorrect
           ? "Great job fixing the sentence!"
           : `Expected: "${exerciseData.correctSentence}"`,
+        highlightedAnswer: fallbackCorrect
+          ? undefined
+          : [{ text: learnerAnswer, isError: true }],
       };
       setEvaluation(res);
       onResult(fallbackCorrect);
@@ -1059,6 +1280,12 @@ function ErrorCorrectionExercise({
               )}
             </div>
             <p className="text-xs leading-relaxed text-neutral-200">{evaluation.feedback}</p>
+
+            {/* Precise Error Highlighting */}
+            {!evaluation.isCorrect && (
+              <RenderHighlightedAnswer segments={evaluation.highlightedAnswer} />
+            )}
+
             <div className="pt-2 border-t border-white/10 text-xs text-neutral-300">
               Reference correct sentence:{" "}
               <strong className="text-white">{exerciseData.correctSentence}</strong>
@@ -1069,7 +1296,7 @@ function ErrorCorrectionExercise({
             onClick={() => onNext(evaluation.isCorrect)}
             className="w-full btn-crimson rounded-xl py-3 text-xs font-audiowide uppercase tracking-wider flex items-center justify-center gap-2"
           >
-            <span>Next Word</span>
+            <span>Next Exercise</span>
             <ArrowRight size={14} />
           </button>
         </div>
@@ -1079,26 +1306,260 @@ function ErrorCorrectionExercise({
 }
 
 // ---------------------------------------------------------------------------
-// Exercise 4: Free Construction
+// Exercise 4: Sentence Transformation
 // ---------------------------------------------------------------------------
 
-function FreeConstructionExercise({
+function SentenceTransformationExercise({
   card,
   cefrLevel,
+  focusPattern,
   onResult,
   onNext,
 }: {
   card: CardRow;
   cefrLevel: CefrLevel;
+  focusPattern?: string;
   onResult: (isCorrect: boolean) => void;
   onNext: (isCorrect: boolean) => void;
 }) {
-  const getContextFn = useServerFn(generateDailyContext);
+  const getTransFn = useServerFn(generateTransformation);
+  const checkTransFn = useServerFn(checkTransformation);
+  const extractPatternFn = useServerFn(extractGrammarPattern);
+
+  const [loading, setLoading] = useState(true);
+  const [exerciseData, setExerciseData] = useState<{
+    originalSentence: string;
+    instruction: string;
+    expectedTransformation: string;
+  } | null>(null);
+
+  const [learnerAnswer, setLearnerAnswer] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [evaluation, setEvaluation] = useState<{
+    isCorrect: boolean;
+    feedback: string;
+    highlightedAnswer?: HighlightedSegment[];
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchExercise() {
+      setLoading(true);
+      try {
+        const res = await getTransFn({
+          data: {
+            word: card.word,
+            definition: card.definition ?? "",
+            level: cefrLevel,
+            focusPattern,
+          },
+        });
+        if (active) {
+          setExerciseData(res);
+        }
+      } catch {
+        if (active) {
+          setExerciseData({
+            originalSentence: `She uses this ${card.word} every day.`,
+            instruction: "Rewrite in the simple past tense",
+            expectedTransformation: `She used this ${card.word} every day.`,
+          });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void fetchExercise();
+    return () => {
+      active = false;
+    };
+  }, [card.word, card.definition, cefrLevel, focusPattern, getTransFn]);
+
+  async function handleCheck(e: React.FormEvent) {
+    e.preventDefault();
+    if (!learnerAnswer.trim() || checking || !exerciseData) return;
+
+    setChecking(true);
+    try {
+      const res = await checkTransFn({
+        data: {
+          learnerAnswer: learnerAnswer.trim(),
+          originalSentence: exerciseData.originalSentence,
+          instruction: exerciseData.instruction,
+          expectedTransformation: exerciseData.expectedTransformation,
+        },
+      });
+      setEvaluation(res);
+      onResult(res.isCorrect);
+
+      // Silent background pattern tracking if incorrect
+      if (!res.isCorrect) {
+        extractPatternFn({
+          data: {
+            feedbackOrErrorType: `Transformation (${exerciseData.instruction}): ${res.feedback}`,
+          },
+        }).catch(() => {});
+      }
+    } catch {
+      const fallbackCorrect =
+        learnerAnswer.trim().toLowerCase() ===
+        exerciseData.expectedTransformation.trim().toLowerCase();
+      const res = {
+        isCorrect: fallbackCorrect,
+        feedback: fallbackCorrect
+          ? "Great job transforming the sentence!"
+          : `Expected: "${exerciseData.expectedTransformation}"`,
+        highlightedAnswer: fallbackCorrect
+          ? undefined
+          : [{ text: learnerAnswer, isError: true }],
+      };
+      setEvaluation(res);
+      onResult(fallbackCorrect);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="py-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+        <Loader2 size={24} className="animate-spin text-[var(--color-crimson)]" />
+        <p className="text-xs label-mono uppercase">AI is crafting a sentence transformation exercise…</p>
+      </div>
+    );
+  }
+
+  if (!exerciseData) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="label-mono text-xs text-[var(--color-gold)]">
+            Sentence Transformation Instruction:
+          </p>
+          <span className="label-mono text-[9px] uppercase tracking-wider text-sky-300 bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 rounded">
+            {exerciseData.instruction}
+          </span>
+        </div>
+        <div className="glass-panel-soft p-5 rounded-xl border border-sky-500/30 bg-sky-950/15 text-lg font-medium text-sky-100">
+          <div className="text-[10px] label-mono text-sky-400/70 uppercase mb-1">Original sentence</div>
+          {exerciseData.originalSentence}
+        </div>
+      </div>
+
+      {!evaluation ? (
+        <form onSubmit={handleCheck} className="space-y-4">
+          <div>
+            <label className="block text-xs label-mono text-neutral-400 mb-1.5">
+              Your transformed sentence:
+            </label>
+            <input
+              type="text"
+              value={learnerAnswer}
+              onChange={(e) => setLearnerAnswer(e.target.value)}
+              placeholder={`Rewrite according to instruction…`}
+              className="w-full glass-panel-soft px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-crimson)] text-white placeholder-neutral-500 font-medium"
+              autoFocus
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!learnerAnswer.trim() || checking}
+            className="w-full btn-crimson rounded-xl py-3 text-xs font-audiowide uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {checking ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> Checking Transformation…
+              </>
+            ) : (
+              <>
+                <span>Check Transformation</span>
+                <Send size={14} />
+              </>
+            )}
+          </button>
+        </form>
+      ) : (
+        <div className="space-y-5 animate-in fade-in duration-300">
+          <div
+            className={`p-5 rounded-xl border space-y-2 ${
+              evaluation.isCorrect
+                ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
+                : "bg-red-950/40 border-red-500/40 text-red-200"
+            }`}
+          >
+            <div className="flex items-center gap-2 font-bold text-sm">
+              {evaluation.isCorrect ? (
+                <>
+                  <CheckCircle2 size={20} className="text-emerald-400" />
+                  <span>Correct Transformation!</span>
+                </>
+              ) : (
+                <>
+                  <XCircle size={20} className="text-red-400" />
+                  <span>Needs Adjustment</span>
+                </>
+              )}
+            </div>
+            <p className="text-xs leading-relaxed text-neutral-200">{evaluation.feedback}</p>
+
+            {/* Precise Error Highlighting */}
+            {!evaluation.isCorrect && (
+              <RenderHighlightedAnswer segments={evaluation.highlightedAnswer} />
+            )}
+
+            <div className="pt-2 border-t border-white/10 text-xs text-neutral-300">
+              Expected transformation:{" "}
+              <strong className="text-white">{exerciseData.expectedTransformation}</strong>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNext(evaluation.isCorrect)}
+            className="w-full btn-crimson rounded-xl py-3 text-xs font-audiowide uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>Next Exercise</span>
+            <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exercise 5: Free Construction & Mini-Paragraph
+// ---------------------------------------------------------------------------
+
+function FreeConstructionExercise({
+  card,
+  extraCards,
+  cefrLevel,
+  focusPattern,
+  onResult,
+  onNext,
+}: {
+  card: CardRow;
+  extraCards?: CardRow[];
+  cefrLevel: CefrLevel;
+  focusPattern?: string;
+  onResult: (isCorrect: boolean) => void;
+  onNext: (isCorrect: boolean) => void;
+}) {
+  const getSingleContextFn = useServerFn(generateDailyContext);
+  const getMultiContextFn = useServerFn(generateMultiWordContext);
   const evalSentenceFn = useServerFn(evaluateFreeSentence);
+  const evalParagraphFn = useServerFn(evaluateFreeParagraph);
+  const extractPatternFn = useServerFn(extractGrammarPattern);
+
+  const isMultiWord = Boolean(extraCards && extraCards.length > 0);
+  const allCards = [card, ...(extraCards ?? [])];
+  const allWordNames = allCards.map((c) => c.word);
 
   const [loadingContext, setLoadingContext] = useState(true);
   const [contextPrompt, setContextPrompt] = useState<string>("");
-  const [learnerSentence, setLearnerSentence] = useState("");
+  const [learnerText, setLearnerText] = useState("");
   const [evaluating, setEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<{
     grammaticallyCorrect: boolean;
@@ -1112,17 +1573,34 @@ function FreeConstructionExercise({
     async function fetchContext() {
       setLoadingContext(true);
       try {
-        const res = await getContextFn({
-          data: {
-            word: card.word,
-            level: cefrLevel,
-          },
-        });
-        if (active) setContextPrompt(res.context);
+        if (isMultiWord) {
+          const res = await getMultiContextFn({
+            data: {
+              words: allCards.map((c) => ({
+                word: c.word,
+                definition: c.definition ?? "",
+              })),
+              level: cefrLevel,
+              focusPattern,
+            },
+          });
+          if (active) setContextPrompt(res.context);
+        } else {
+          const res = await getSingleContextFn({
+            data: {
+              word: card.word,
+              level: cefrLevel,
+              focusPattern,
+            },
+          });
+          if (active) setContextPrompt(res.context);
+        }
       } catch {
         if (active) {
           setContextPrompt(
-            `Use the word "${card.word}" in a short sentence describing a daily workplace or personal situation.`,
+            isMultiWord
+              ? `Write a short 3-4 sentence paragraph connecting these target words: ${allWordNames.join(", ")}.`
+              : `Use the word "${card.word}" in a short sentence describing a daily situation.`,
           );
         }
       } finally {
@@ -1133,31 +1611,57 @@ function FreeConstructionExercise({
     return () => {
       active = false;
     };
-  }, [card.word, cefrLevel, getContextFn]);
+  }, [card.word, cefrLevel, focusPattern, isMultiWord]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!learnerSentence.trim() || evaluating) return;
+    if (!learnerText.trim() || evaluating) return;
 
     setEvaluating(true);
     try {
-      const res = await evalSentenceFn({
-        data: {
-          word: card.word,
-          context: contextPrompt,
-          learnerSentence: learnerSentence.trim(),
-          level: cefrLevel,
-        },
-      });
-      setEvaluation(res);
-      const acceptable = res.grammaticallyCorrect && res.naturalness !== "not quite right";
-      onResult(acceptable);
+      if (isMultiWord) {
+        const res = await evalParagraphFn({
+          data: {
+            words: allWordNames,
+            context: contextPrompt,
+            learnerParagraph: learnerText.trim(),
+            level: cefrLevel,
+          },
+        });
+        setEvaluation(res);
+        const acceptable = res.grammaticallyCorrect && res.naturalness !== "not quite right";
+        onResult(acceptable);
+
+        if (!acceptable) {
+          extractPatternFn({
+            data: { feedbackOrErrorType: `Free paragraph: ${res.feedback}` },
+          }).catch(() => {});
+        }
+      } else {
+        const res = await evalSentenceFn({
+          data: {
+            word: card.word,
+            context: contextPrompt,
+            learnerSentence: learnerText.trim(),
+            level: cefrLevel,
+          },
+        });
+        setEvaluation(res);
+        const acceptable = res.grammaticallyCorrect && res.naturalness !== "not quite right";
+        onResult(acceptable);
+
+        if (!acceptable) {
+          extractPatternFn({
+            data: { feedbackOrErrorType: `Free sentence: ${res.feedback}` },
+          }).catch(() => {});
+        }
+      }
     } catch {
       const res = {
         grammaticallyCorrect: true,
         naturalness: "natural" as const,
-        feedback: "Good effort! Your sentence expresses the idea clearly.",
-        improvedVersion: learnerSentence,
+        feedback: "Good effort! Your writing expresses the idea clearly.",
+        improvedVersion: learnerText,
       };
       setEvaluation(res);
       onResult(true);
@@ -1170,7 +1674,7 @@ function FreeConstructionExercise({
     return (
       <div className="py-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2 size={24} className="animate-spin text-[var(--color-crimson)]" />
-        <p className="text-xs label-mono uppercase">AI is creating a realistic scenario prompt…</p>
+        <p className="text-xs label-mono uppercase">AI is creating a scenario prompt…</p>
       </div>
     );
   }
@@ -1178,9 +1682,16 @@ function FreeConstructionExercise({
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <p className="label-mono text-xs text-[var(--color-gold)]">
-          Free Construction Prompt
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="label-mono text-xs text-[var(--color-gold)]">
+            {isMultiWord ? "Mini-Paragraph Challenge Prompt" : "Free Construction Prompt"}
+          </p>
+          {isMultiWord && (
+            <span className="label-mono text-[9px] uppercase tracking-wider text-[var(--color-gold)] bg-[var(--color-gold)]/10 border border-[var(--color-gold)]/30 px-2 py-0.5 rounded">
+              Use all {allCards.length} words
+            </span>
+          )}
+        </div>
         <div className="glass-panel-soft p-5 rounded-xl border border-[var(--color-gold)]/30 bg-[var(--color-gold)]/5 text-base font-medium text-neutral-100 flex items-start gap-3">
           <BookOpen size={20} className="text-[var(--color-gold)] shrink-0 mt-0.5" />
           <div>{contextPrompt}</div>
@@ -1191,20 +1702,26 @@ function FreeConstructionExercise({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs label-mono text-neutral-400 mb-1.5">
-              Write your own sentence using "{card.word}":
+              {isMultiWord
+                ? `Write a 3-4 sentence paragraph using (${allWordNames.join(", ")}):`
+                : `Write your own sentence using "${card.word}":`}
             </label>
             <textarea
-              rows={3}
-              value={learnerSentence}
-              onChange={(e) => setLearnerSentence(e.target.value)}
-              placeholder={`Write a sentence using ${card.word} in this context…`}
+              rows={isMultiWord ? 4 : 3}
+              value={learnerText}
+              onChange={(e) => setLearnerText(e.target.value)}
+              placeholder={
+                isMultiWord
+                  ? `Write a coherent paragraph connecting ${allWordNames.join(", ")}…`
+                  : `Write a sentence using ${card.word} in this context…`
+              }
               className="w-full glass-panel-soft p-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-crimson)] text-white placeholder-neutral-500 font-medium resize-none"
               autoFocus
             />
           </div>
           <button
             type="submit"
-            disabled={!learnerSentence.trim() || evaluating}
+            disabled={!learnerText.trim() || evaluating}
             className="w-full btn-crimson rounded-xl py-3 text-xs font-audiowide uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {evaluating ? (
@@ -1213,7 +1730,7 @@ function FreeConstructionExercise({
               </>
             ) : (
               <>
-                <span>Submit Sentence</span>
+                <span>{isMultiWord ? "Submit Paragraph" : "Submit Sentence"}</span>
                 <Send size={14} />
               </>
             )}
@@ -1255,7 +1772,7 @@ function FreeConstructionExercise({
 
             {/* Model / Improved Version */}
             <div className="space-y-1 pl-3 border-l-2 border-[var(--color-gold)]">
-              <p className="label-mono text-[9px] text-[var(--color-gold)] uppercase">Improved Version (For Model Comparison)</p>
+              <p className="label-mono text-[9px] text-[var(--color-gold)] uppercase">Improved Version (Model Comparison)</p>
               <p className="text-sm font-medium text-white">{evaluation.improvedVersion}</p>
             </div>
           </div>
@@ -1268,7 +1785,7 @@ function FreeConstructionExercise({
             }
             className="w-full btn-crimson rounded-xl py-3 text-xs font-audiowide uppercase tracking-wider flex items-center justify-center gap-2"
           >
-            <span>Next Word</span>
+            <span>Next Exercise</span>
             <ArrowRight size={14} />
           </button>
         </div>
