@@ -347,7 +347,7 @@ function ShadowingPage() {
   }
 
   return (
-    <div className="max-w-[1840px] mx-auto px-1 sm:px-2 h-[calc(100vh-7rem)] min-h-[650px] flex flex-col gap-3 font-mono text-white overflow-hidden">
+    <div className="max-w-[1840px] mx-auto px-1 sm:px-2 min-h-0 lg:h-[calc(100vh-7rem)] lg:min-h-[650px] flex flex-col gap-3 font-mono text-white overflow-visible lg:overflow-hidden">
       {/* Banner info */}
       {showSkipBanner && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2 text-xs flex items-center justify-between shrink-0">
@@ -368,7 +368,7 @@ function ShadowingPage() {
       {/* Main Responsive Grid Workspace */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1450px)_360px] justify-center gap-3 min-h-0 min-w-0 relative">
         {/* LEFT COMPONENT: Immersive Player Suite */}
-        <div className="flex flex-col min-h-0 min-w-0">
+        <div className="flex flex-col min-h-[560px] lg:min-h-0 min-w-0">
           {/* Main Stage (Video Player / Injection Node) */}
           <div className="flex-1 bg-gradient-to-br from-[#120403]/60 via-[#0d0605]/40 to-black/60 backdrop-blur-md border border-[var(--color-border)]/40 p-4 rounded-2xl flex flex-col justify-between min-h-0 relative shadow-2xl">
             {currentVideo ? (
