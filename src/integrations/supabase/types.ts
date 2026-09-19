@@ -519,6 +519,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pronunciation_progress: {
+        Row: {
+          id: string
+          user_id: string
+          category: string
+          clear_count: number
+          confusable_count: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          category: string
+          clear_count?: number
+          confusable_count?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          category?: string
+          clear_count?: number
+          confusable_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shadowing_notes: {
         Row: {
           card_id: string | null

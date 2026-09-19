@@ -16,6 +16,7 @@ import { Route as AuthenticatedGrammarRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedLibraryRouteImport } from './routes/_authenticated/library'
+import { Route as AuthenticatedPronunciationRouteImport } from './routes/_authenticated/pronunciation'
 import { Route as AuthenticatedReadingRouteImport } from './routes/_authenticated/reading'
 import { Route as AuthenticatedReviewRouteImport } from './routes/_authenticated/review'
 import { Route as AuthenticatedShadowingRouteImport } from './routes/_authenticated/shadowing'
@@ -56,6 +57,12 @@ const AuthenticatedLibraryRoute = AuthenticatedLibraryRouteImport.update({
   path: '/library',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPronunciationRoute =
+  AuthenticatedPronunciationRouteImport.update({
+    id: '/pronunciation',
+    path: '/pronunciation',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedReadingRoute = AuthenticatedReadingRouteImport.update({
   id: '/reading',
   path: '/reading',
@@ -91,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
+  '/pronunciation': typeof AuthenticatedPronunciationRoute
   '/reading': typeof AuthenticatedReadingRoute
   '/review': typeof AuthenticatedReviewRoute
   '/shadowing': typeof AuthenticatedShadowingRoute
@@ -104,6 +112,7 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/home': typeof AuthenticatedHomeRoute
   '/library': typeof AuthenticatedLibraryRoute
+  '/pronunciation': typeof AuthenticatedPronunciationRoute
   '/reading': typeof AuthenticatedReadingRoute
   '/review': typeof AuthenticatedReviewRoute
   '/shadowing': typeof AuthenticatedShadowingRoute
@@ -119,6 +128,7 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/library': typeof AuthenticatedLibraryRoute
+  '/_authenticated/pronunciation': typeof AuthenticatedPronunciationRoute
   '/_authenticated/reading': typeof AuthenticatedReadingRoute
   '/_authenticated/review': typeof AuthenticatedReviewRoute
   '/_authenticated/shadowing': typeof AuthenticatedShadowingRoute
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/home'
     | '/library'
+    | '/pronunciation'
     | '/reading'
     | '/review'
     | '/shadowing'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/home'
     | '/library'
+    | '/pronunciation'
     | '/reading'
     | '/review'
     | '/shadowing'
@@ -161,6 +173,7 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/home'
     | '/_authenticated/library'
+    | '/_authenticated/pronunciation'
     | '/_authenticated/reading'
     | '/_authenticated/review'
     | '/_authenticated/shadowing'
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLibraryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/pronunciation': {
+      id: '/_authenticated/pronunciation'
+      path: '/pronunciation'
+      fullPath: '/pronunciation'
+      preLoaderRoute: typeof AuthenticatedPronunciationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/reading': {
       id: '/_authenticated/reading'
       path: '/reading'
@@ -268,6 +288,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedLibraryRoute: typeof AuthenticatedLibraryRoute
+  AuthenticatedPronunciationRoute: typeof AuthenticatedPronunciationRoute
   AuthenticatedReadingRoute: typeof AuthenticatedReadingRoute
   AuthenticatedReviewRoute: typeof AuthenticatedReviewRoute
   AuthenticatedShadowingRoute: typeof AuthenticatedShadowingRoute
@@ -280,6 +301,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedLibraryRoute: AuthenticatedLibraryRoute,
+  AuthenticatedPronunciationRoute: AuthenticatedPronunciationRoute,
   AuthenticatedReadingRoute: AuthenticatedReadingRoute,
   AuthenticatedReviewRoute: AuthenticatedReviewRoute,
   AuthenticatedShadowingRoute: AuthenticatedShadowingRoute,
