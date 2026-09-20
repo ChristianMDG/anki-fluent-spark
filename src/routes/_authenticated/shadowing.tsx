@@ -301,13 +301,17 @@ function ShadowingPage() {
   async function loadFacebook(urlOverride?: string) {
     const url = (urlOverride ?? fbUrl).trim();
     if (!isFacebookVideoUrl(url)) return toast.error("Invalid Facebook video URL");
+    // Cached once on the row — never re-fetched when rendering history.
+    const oembed = await fetchFacebookOembed(url);
     const { data, error } = await supabase
       .from("shadowing_videos")
       .insert({
         source_type: "facebook",
         source_url: url,
-        title: `Facebook video — ${url.length > 48 ? `${url.slice(0, 48)}…` : url}`,
-        thumbnail_url: "",
+        title:
+          oembed.title ||
+          `Facebook video — ${url.length > 48 ? `${url.slice(0, 48)}…` : url}`,
+        thumbnail_url: oembed.thumbnail_url,
         user_id: (await supabase.auth.getUser()).data.user!.id,
       })
       .select()
