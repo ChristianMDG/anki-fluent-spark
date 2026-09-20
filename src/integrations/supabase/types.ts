@@ -179,6 +179,42 @@ export type Database = {
         }
         Relationships: []
       }
+      custom_pronunciation_items: {
+        Row: {
+          articulation_tip: string
+          challenge_category: string
+          confusable_alternative: string | null
+          created_at: string
+          id: string
+          ipa: string
+          stress_note: string | null
+          user_id: string
+          word_or_phrase: string
+        }
+        Insert: {
+          articulation_tip: string
+          challenge_category: string
+          confusable_alternative?: string | null
+          created_at?: string
+          id?: string
+          ipa: string
+          stress_note?: string | null
+          user_id: string
+          word_or_phrase: string
+        }
+        Update: {
+          articulation_tip?: string
+          challenge_category?: string
+          confusable_alternative?: string | null
+          created_at?: string
+          id?: string
+          ipa?: string
+          stress_note?: string | null
+          user_id?: string
+          word_or_phrase?: string
+        }
+        Relationships: []
+      }
       daily_goals: {
         Row: {
           created_at: string
