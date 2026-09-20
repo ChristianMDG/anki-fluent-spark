@@ -14,46 +14,10 @@ export type Database = {
   }
   public: {
     Tables: {
-      custom_pronunciation_items: {
-        Row: {
-          id: string
-          user_id: string
-          word_or_phrase: string
-          ipa: string
-          challenge_category: string
-          confusable_alternative: string | null
-          articulation_tip: string
-          stress_note: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          word_or_phrase: string
-          ipa: string
-          challenge_category: string
-          confusable_alternative?: string | null
-          articulation_tip: string
-          stress_note?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          word_or_phrase?: string
-          ipa?: string
-          challenge_category?: string
-          confusable_alternative?: string | null
-          articulation_tip?: string
-          stress_note?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       book_level_estimates: {
         Row: {
           confidence: string | null
-          created_at: string
+          created_at: string | null
           description: string | null
           estimated_level: string
           gutenberg_book_id: number
@@ -62,7 +26,7 @@ export type Database = {
         }
         Insert: {
           confidence?: string | null
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           estimated_level: string
           gutenberg_book_id: number
@@ -71,7 +35,7 @@ export type Database = {
         }
         Update: {
           confidence?: string | null
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           estimated_level?: string
           gutenberg_book_id?: number
@@ -244,8 +208,8 @@ export type Database = {
       }
       fluency_recordings: {
         Row: {
-          confidence_rating: number | null
           comprehension_score: string | null
+          confidence_rating: number | null
           created_at: string
           duration_seconds: number
           exercise_type: string
@@ -260,8 +224,8 @@ export type Database = {
           week_theme: string
         }
         Insert: {
-          confidence_rating?: number | null
           comprehension_score?: string | null
+          confidence_rating?: number | null
           created_at?: string
           duration_seconds?: number
           exercise_type: string
@@ -276,8 +240,8 @@ export type Database = {
           week_theme?: string
         }
         Update: {
-          confidence_rating?: number | null
           comprehension_score?: string | null
+          confidence_rating?: number | null
           created_at?: string
           duration_seconds?: number
           exercise_type?: string
@@ -348,36 +312,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      grammar_error_patterns: {
-        Row: {
-          created_at: string
-          id: string
-          last_seen_at: string
-          occurrences: number
-          pattern_tag: string
-          resolved: boolean
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          last_seen_at?: string
-          occurrences?: number
-          pattern_tag: string
-          resolved?: boolean
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          last_seen_at?: string
-          occurrences?: number
-          pattern_tag?: string
-          resolved?: boolean
-          user_id?: string
-        }
-        Relationships: []
       }
       journey_cells: {
         Row: {
@@ -504,6 +438,33 @@ export type Database = {
           },
         ]
       }
+      pronunciation_progress: {
+        Row: {
+          category: string
+          clear_count: number
+          confusable_count: number
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          clear_count?: number
+          confusable_count?: number
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          clear_count?: number
+          confusable_count?: number
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       reading_progress: {
         Row: {
           book_title: string
@@ -531,87 +492,6 @@ export type Database = {
           total_chunks?: number
           updated_at?: string | null
           user_id?: string
-        }
-        Relationships: []
-      }
-      reading_preferences: {
-        Row: {
-          user_id: string
-          font_size: string
-          line_spacing: string
-          theme: string
-          read_aloud_rate: number
-          updated_at: string
-        }
-        Insert: {
-          user_id: string
-          font_size?: string
-          line_spacing?: string
-          theme?: string
-          read_aloud_rate?: number
-          updated_at?: string
-        }
-        Update: {
-          user_id?: string
-          font_size?: string
-          line_spacing?: string
-          theme?: string
-          read_aloud_rate?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      reading_bookmarks: {
-        Row: {
-          id: string
-          user_id: string
-          gutenberg_book_id: number
-          chunk_index: number
-          label: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          gutenberg_book_id: number
-          chunk_index: number
-          label?: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          gutenberg_book_id?: number
-          chunk_index?: number
-          label?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      pronunciation_progress: {
-        Row: {
-          id: string
-          user_id: string
-          category: string
-          clear_count: number
-          confusable_count: number
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          category: string
-          clear_count?: number
-          confusable_count?: number
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          category?: string
-          clear_count?: number
-          confusable_count?: number
-          updated_at?: string
         }
         Relationships: []
       }
