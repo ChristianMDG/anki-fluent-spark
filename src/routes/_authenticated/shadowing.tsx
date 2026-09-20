@@ -45,6 +45,61 @@ function isFacebookVideoUrl(url: string): boolean {
   return /^(https?:\/\/)?([\w-]+\.)*(facebook\.com|fb\.watch)\/\S+$/i.test(url.trim());
 }
 
+/**
+ * Meta oEmbed Video API (tokenless since 2026). Observed response fields:
+ * provider_url, provider_name, html, type, version, width.
+ * `title`, `thumbnail_url` & author_* are deprecated and not returned anymore,
+ * so the title is parsed out of the returned embed `html` snippet.
+ */
+interface FacebookOembedResponse {
+  type?: string;
+  version?: string;
+  html?: string;
+  width?: number;
+  height?: number;
+  provider_name?: string;
+  provider_url?: string;
+  title?: string;
+  thumbnail_url?: string;
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function titleFromOembedHtml(html: string): string {
+  // The blockquote's first anchor points at the video URL and holds its caption.
+  const match = html.match(/<a[^>]+href="[^"]*\/videos?\/[^"]*"[^>]*>([^<]+)<\/a>/i);
+  const raw = match?.[1] ? decodeHtmlEntities(match[1]).trim() : "";
+  if (!raw || /^https?:\/\//i.test(raw)) return "";
+  return raw.slice(0, 200);
+}
+
+async function fetchFacebookOembed(
+  url: string,
+): Promise<{ title: string; thumbnail_url: string }> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v26.0/oembed_video?url=${encodeURIComponent(url)}&omitscript=true`,
+    );
+    if (!res.ok) return { title: "", thumbnail_url: "" };
+    const json = (await res.json()) as FacebookOembedResponse;
+    const title =
+      (typeof json.title === "string" && json.title.trim()) ||
+      (typeof json.html === "string" ? titleFromOembedHtml(json.html) : "");
+    const thumbnail_url = typeof json.thumbnail_url === "string" ? json.thumbnail_url : "";
+    return { title, thumbnail_url };
+  } catch {
+    return { title: "", thumbnail_url: "" };
+  }
+}
+
 export const Route = createFileRoute("/_authenticated/shadowing")({
   component: ShadowingPage,
 });
@@ -246,13 +301,17 @@ function ShadowingPage() {
   async function loadFacebook(urlOverride?: string) {
     const url = (urlOverride ?? fbUrl).trim();
     if (!isFacebookVideoUrl(url)) return toast.error("Invalid Facebook video URL");
+    // Cached once on the row — never re-fetched when rendering history.
+    const oembed = await fetchFacebookOembed(url);
     const { data, error } = await supabase
       .from("shadowing_videos")
       .insert({
         source_type: "facebook",
         source_url: url,
-        title: `Facebook video — ${url.length > 48 ? `${url.slice(0, 48)}…` : url}`,
-        thumbnail_url: "",
+        title:
+          oembed.title ||
+          `Facebook video — ${url.length > 48 ? `${url.slice(0, 48)}…` : url}`,
+        thumbnail_url: oembed.thumbnail_url,
         user_id: (await supabase.auth.getUser()).data.user!.id,
       })
       .select()
