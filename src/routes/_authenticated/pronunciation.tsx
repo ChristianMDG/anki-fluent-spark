@@ -3,13 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  PRONUNCIATION_CATEGORIES,
-  PRONUNCIATION_CHALLENGES,
-  getChallengesForCategory,
-  type PronunciationChallenge,
-  type CategoryInfo,
-} from "@/lib/pronunciation-challenges";
+import type { PronunciationChallenge } from "@/lib/pronunciation-challenges";
 import { getSpeechRecognitionCtor, type SpeechRecognitionLike } from "@/lib/speech";
 import { PitchContourChart } from "@/components/fluency/PitchContourChart";
 import { analyzePronunciationChallenge } from "@/lib/vocab.functions";
@@ -48,14 +42,8 @@ export const Route = createFileRoute("/_authenticated/pronunciation")({
 });
 
 // ---------------------------------------------------------------------------
-// DB Types & Progress Hook
+// DB Types & Hooks
 // ---------------------------------------------------------------------------
-
-interface CategoryProgressRow {
-  category: string;
-  clear_count: number;
-  confusable_count: number;
-}
 
 interface CustomPronunciationItem {
   id: string;
