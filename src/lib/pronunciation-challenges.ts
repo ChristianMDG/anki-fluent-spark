@@ -6,6 +6,8 @@ export interface PronunciationChallenge {
   ipa: string;
   confusablePair?: string;
   tip: string;
+  /** Optional stress / rhythm note — shown alongside pitch chart for word-stress challenges */
+  stressNote?: string;
 }
 
 export interface CategoryInfo {

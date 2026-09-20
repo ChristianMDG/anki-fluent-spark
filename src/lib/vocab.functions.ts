@@ -205,3 +205,114 @@ export const generateFullLesson = createServerFn({ method: "POST" })
     if (upErr) throw new Error(upErr.message);
     return content;
   });
+
+// ---------- Analyse Pronunciation Challenge ----------
+
+const PRONUNCIATION_ANALYSIS_SYSTEM = `You are a linguistics expert and English pronunciation coach specialising in French-speaker challenges. Given an English word or expression, return a JSON object with EXACTLY these fields and NO other text:
+
+{
+  "ipa": "/phonetic transcription using IPA symbols/",
+  "challengeCategory": "one of: th_sounds | vowels | english_r | h_sounds | w_vs_v | word_stress | consonant_cluster | other",
+  "articulationTip": "1-2 concrete sentences explaining how to produce the hardest sound(s) correctly — physical placement of tongue/lips/jaw — written for a French speaker",
+  "confusableAlternative": "the exact English word or short phrase a French speaker would most likely mispronounce this as, or null if no plausible confusable exists",
+  "stressNote": "brief note on syllable stress pattern and rhythm if stress is a notable challenge for this word, or null if not applicable"
+}
+
+Rules:
+- Respond ONLY with valid JSON, no markdown, no preamble.
+- All text in English only.
+- confusableAlternative MUST be null (not an empty string) when you are not confident of a real, linguistically plausible confusable pair.
+- stressNote MUST be null for monosyllabic words or when stress is not a significant challenge.
+- challengeCategory should reflect the PRIMARY phonetic challenge, not secondary ones.`;
+
+export interface PronunciationAnalysis {
+  ipa: string;
+  challengeCategory: string;
+  articulationTip: string;
+  confusableAlternative: string | null;
+  stressNote: string | null;
+}
+
+export const analyzePronunciationChallenge = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { wordOrPhrase: string }) =>
+    z.object({ wordOrPhrase: z.string().trim().min(1).max(120) }).parse(d),
+  )
+  .handler(async ({ data, context }): Promise<PronunciationAnalysis> => {
+    const { supabase, userId } = context;
+    const word = data.wordOrPhrase.trim();
+
+    // --- Cache check ---
+    const { data: cached } = await supabase
+      .from("custom_pronunciation_items")
+      .select("ipa, challenge_category, articulation_tip, confusable_alternative, stress_note")
+      .eq("user_id", userId)
+      .ilike("word_or_phrase", word)
+      .maybeSingle();
+
+    if (cached) {
+      return {
+        ipa: cached.ipa,
+        challengeCategory: cached.challenge_category,
+        articulationTip: cached.articulation_tip,
+        confusableAlternative: cached.confusable_alternative,
+        stressNote: cached.stress_note,
+      };
+    }
+
+    // --- AI call ---
+    const raw = await callAI(PRONUNCIATION_ANALYSIS_SYSTEM, `Word or expression: ${word}`, true);
+
+    let analysis: PronunciationAnalysis;
+    try {
+      const parsed = JSON.parse(raw) as {
+        ipa?: unknown;
+        challengeCategory?: unknown;
+        articulationTip?: unknown;
+        confusableAlternative?: unknown;
+        stressNote?: unknown;
+      };
+
+      // Validate shape — never trust raw AI output
+      if (
+        typeof parsed.ipa !== "string" ||
+        typeof parsed.challengeCategory !== "string" ||
+        typeof parsed.articulationTip !== "string"
+      ) {
+        throw new Error("AI returned invalid shape");
+      }
+
+      analysis = {
+        ipa: parsed.ipa,
+        challengeCategory: parsed.challengeCategory,
+        articulationTip: parsed.articulationTip,
+        confusableAlternative:
+          typeof parsed.confusableAlternative === "string" &&
+          parsed.confusableAlternative.length > 0
+            ? parsed.confusableAlternative
+            : null,
+        stressNote:
+          typeof parsed.stressNote === "string" && parsed.stressNote.length > 0
+            ? parsed.stressNote
+            : null,
+      };
+    } catch {
+      throw new Error("Failed to parse pronunciation analysis from AI.");
+    }
+
+    // --- Persist (upsert on unique index) ---
+    await supabase.from("custom_pronunciation_items").upsert(
+      {
+        user_id: userId,
+        word_or_phrase: word,
+        ipa: analysis.ipa,
+        challenge_category: analysis.challengeCategory,
+        articulation_tip: analysis.articulationTip,
+        confusable_alternative: analysis.confusableAlternative,
+        stress_note: analysis.stressNote,
+      },
+      { onConflict: "user_id,word_or_phrase" },
+    );
+
+    return analysis;
+  });

@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_pronunciation_items: {
+        Row: {
+          id: string
+          user_id: string
+          word_or_phrase: string
+          ipa: string
+          challenge_category: string
+          confusable_alternative: string | null
+          articulation_tip: string
+          stress_note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          word_or_phrase: string
+          ipa: string
+          challenge_category: string
+          confusable_alternative?: string | null
+          articulation_tip: string
+          stress_note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          word_or_phrase?: string
+          ipa?: string
+          challenge_category?: string
+          confusable_alternative?: string | null
+          articulation_tip?: string
+          stress_note?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       book_level_estimates: {
         Row: {
           confidence: string | null
