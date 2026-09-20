@@ -46,6 +46,7 @@ function GeneratePage() {
   const [word, setWord] = useState("");
   const [currentCard, setCurrentCard] = useState<CardRow | null>(null);
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [filter, setFilter] = useState<"all" | "queued" | "exported">("all");
   const [sort, setSort] = useState<SortMode>("recent");
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
@@ -53,6 +54,11 @@ function GeneratePage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(q), 300);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   const history = useQuery({
     queryKey: ["cards", "list"],
@@ -129,7 +135,7 @@ function GeneratePage() {
 
   const filtered = useMemo(() => {
     const list = history.data ?? [];
-    const needle = q.trim().toLowerCase();
+    const needle = debouncedQ.trim().toLowerCase();
     const result = list.filter((c) => {
       if (filter === "queued" && c.exported) return false;
       if (filter === "exported" && !c.exported) return false;
@@ -145,7 +151,7 @@ function GeneratePage() {
       return [...result].sort((a, b) => a.word.localeCompare(b.word));
     }
     return result;
-  }, [history.data, q, filter, sort, reviewOnly]);
+  }, [history.data, debouncedQ, filter, sort, reviewOnly]);
 
   function exportFiltered() {
     if (filtered.length === 0) return toast.info("No cards to export");

@@ -183,7 +183,7 @@
     transition: all 200ms ease;
   }
 
-  .btn-crimson:hover {
+  .btn-crimson:hover:not(:disabled) {
     box-shadow: 0 10px 32px -8px oklch(0.65 0.24 27 / 0.75);
     transform: translateY(-1px);
   }
@@ -192,6 +192,37 @@
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: oklch(0.94 0.02 30);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: all 200ms ease;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: oklch(0.75 0.05 25);
+    border: 1px solid transparent;
+    transition: all 200ms ease;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
   }
 
   .word-target {

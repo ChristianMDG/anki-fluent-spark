@@ -1,19 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import React, { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Pin, PinOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-  Legend,
-} from "recharts";
 import {
   CEFR_LEVELS,
   type CefrLevel,
@@ -21,6 +11,56 @@ import {
   type LearnerWeakPoint,
 } from "@/integrations/supabase/learner-profile.types";
 import { WeakPointsPanel } from "@/components/fluency/WeakPointsPanel";
+
+// Dynamic route-level code splitting for Recharts
+const LazyTrendChart = lazy(() =>
+  import("recharts").then((mod) => ({
+    default: function TrendChart({ trend }: { trend: Array<{ week: string; fluency: number; confidence: number; hesitation: number }> }) {
+      return (
+        <mod.ResponsiveContainer width="100%" height="100%">
+          <mod.LineChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <mod.CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+            <mod.XAxis dataKey="week" tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} />
+            <mod.YAxis domain={[1, 5]} tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} />
+            <mod.Tooltip
+              contentStyle={{
+                background: "rgba(15,15,20,0.95)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+            <mod.Legend wrapperStyle={{ fontSize: 12 }} />
+            <mod.Line
+              type="monotone"
+              dataKey="fluency"
+              name="Fluency"
+              stroke="#dc2626"
+              strokeWidth={2}
+              dot={false}
+            />
+            <mod.Line
+              type="monotone"
+              dataKey="confidence"
+              name="Confidence"
+              stroke="#eab308"
+              strokeWidth={2}
+              dot={false}
+            />
+            <mod.Line
+              type="monotone"
+              dataKey="hesitation"
+              name="Hesitations"
+              stroke="#94a3b8"
+              strokeWidth={2}
+              dot={false}
+            />
+          </mod.LineChart>
+        </mod.ResponsiveContainer>
+      );
+    },
+  })),
+);
 
 export const Route = createFileRoute("/_authenticated/fluency/journal")({
   component: FluencyJournal,
@@ -176,12 +216,19 @@ function FluencyJournal() {
 
   async function togglePin(r: Row) {
     const next = !r.pinned;
+    const queryKey = ["fluency-journal", typeFilter, from, to];
+    // Optimistic cache update
+    qc.setQueryData<Row[]>(queryKey, (old) =>
+      (old ?? []).map((item) => (item.id === r.id ? { ...item, pinned: next } : item)),
+    );
     const { error } = await supabase
       .from("fluency_recordings")
       .update({ pinned: next })
       .eq("id", r.id);
-    if (error) return toast.error(error.message);
-    qc.invalidateQueries({ queryKey: ["fluency-journal"] });
+    if (error) {
+      toast.error(error.message);
+      qc.invalidateQueries({ queryKey: ["fluency-journal"] });
+    }
   }
 
   // Derive a simple level history note
@@ -281,46 +328,15 @@ function FluencyJournal() {
           </p>
         ) : (
           <div className="h-64 -mx-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} />
-                <YAxis domain={[1, 5]} tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(15,15,20,0.95)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line
-                  type="monotone"
-                  dataKey="fluency"
-                  name="Fluency"
-                  stroke="#dc2626"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="confidence"
-                  name="Confidence"
-                  stroke="#eab308"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="hesitation"
-                  name="Hesitations"
-                  stroke="#94a3b8"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <Suspense
+              fallback={
+                <div className="h-full w-full rounded-xl bg-white/[0.04] border border-white/[0.05] animate-pulse flex items-center justify-center text-xs text-neutral-500">
+                  Loading trend chart…
+                </div>
+              }
+            >
+              <LazyTrendChart trend={trend} />
+            </Suspense>
           </div>
         )}
       </div>

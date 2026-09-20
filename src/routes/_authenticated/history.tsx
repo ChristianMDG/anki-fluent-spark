@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDialog } from "@/components/ConfirmDialog";
@@ -12,7 +12,14 @@ export const Route = createFileRoute("/_authenticated/history")({
 
 function HistoryPage() {
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(q), 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+
   const videos = useQuery({
     queryKey: ["shadowing_videos", "all"],
     queryFn: async () => {
@@ -26,7 +33,7 @@ function HistoryPage() {
   });
 
   const filtered = (videos.data ?? []).filter((v) =>
-    (v.title ?? "").toLowerCase().includes(q.toLowerCase()),
+    (v.title ?? "").toLowerCase().includes(debouncedQ.toLowerCase()),
   );
 
   async function deleteVideo(v: { id: string; source_type: string; storage_path: string | null; title: string | null }) {
@@ -96,48 +103,77 @@ function HistoryPage() {
         className="w-full glass-panel-soft px-4 py-3 rounded-lg"
       />
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {filtered.map((v) => (
-          <div
-            key={v.id}
-            className="glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
-          >
-            <Link to="/shadowing" className="block">
-              <div className="aspect-video bg-black">
-                {v.thumbnail_url ? (
-                  <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                    {v.source_type === "upload"
-                      ? "📁 Upload"
-                      : v.source_type === "facebook"
-                        ? "▶ Facebook"
-                        : "▶ YouTube"}
-                  </div>
-                )}
+        {videos.isLoading ? (
+          <>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="glass-panel-soft rounded-lg overflow-hidden animate-pulse">
+                <div className="aspect-video bg-white/10" />
+                <div className="p-3 space-y-2">
+                  <div className="h-4 bg-white/10 rounded w-3/4" />
+                  <div className="h-3 bg-white/5 rounded w-1/2" />
+                </div>
               </div>
-              <div className="p-3">
-                <p className="text-sm font-medium truncate">{v.title || "Untitled"}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {new Date(v.created_at).toLocaleDateString("en-US")}
-                </p>
-              </div>
-            </Link>
+            ))}
+          </>
+        ) : videos.isError ? (
+          <div className="col-span-full glass-panel p-8 text-center space-y-3">
+            <p className="text-sm text-red-400">Failed to load shadowing video history.</p>
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                deleteVideo(v);
-              }}
-              className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
-              aria-label="Delete video"
+              onClick={() => videos.refetch()}
+              className="px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/40 text-xs text-white font-mono uppercase cursor-pointer"
             >
-              <Trash2 size={14} />
+              Try again
             </button>
           </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="col-span-full text-center text-muted-foreground py-12">
-            {q ? "No results" : "No videos yet"}
-          </p>
+        ) : (
+          filtered.map((v) => (
+            <div
+              key={v.id}
+              className="glass-panel-soft rounded-lg overflow-hidden hover:border-[color:var(--color-crimson-glow)] transition group relative"
+            >
+              <Link to="/shadowing" className="block">
+                <div className="aspect-video bg-black">
+                  {v.thumbnail_url ? (
+                    <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                      {v.source_type === "upload"
+                        ? "📁 Upload"
+                        : v.source_type === "facebook"
+                          ? "▶ Facebook"
+                          : "▶ YouTube"}
+                    </div>
+                  )}
+                </div>
+                <div className="p-3">
+                  <p className="text-sm font-medium truncate">{v.title || "Untitled"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {new Date(v.created_at).toLocaleDateString("en-US")}
+                  </p>
+                </div>
+              </Link>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  deleteVideo(v);
+                }}
+                className="absolute top-2 right-2 p-1.5 rounded-md bg-black/60 backdrop-blur text-muted-foreground hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
+                aria-label="Delete video"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))
+        )}
+        {!videos.isLoading && !videos.isError && filtered.length === 0 && (
+          <div className="col-span-full glass-panel-soft p-12 text-center text-muted-foreground space-y-2">
+            <p className="text-sm font-medium">{debouncedQ ? "No matching videos found" : "No shadowing history yet"}</p>
+            <p className="text-xs text-neutral-500">
+              {debouncedQ
+                ? `No videos match "${debouncedQ}". Try another term.`
+                : "Practice with YouTube or Facebook videos in the Shadowing module to populate your history."}
+            </p>
+          </div>
         )}
       </div>
     </div>

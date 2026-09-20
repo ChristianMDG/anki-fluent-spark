@@ -276,14 +276,7 @@ function ReviewPage() {
   }, [queue]);
 
   if (isLoading || queue === null) {
-    return (
-      <div className="w-full h-[60vh] flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 border-2 border-[var(--color-crimson)] border-t-transparent rounded-full animate-spin" />
-        <p className="font-audiowide text-xs tracking-widest text-neutral-400 uppercase">
-          Loading Review Queue...
-        </p>
-      </div>
-    );
+    return <ReviewCardSkeleton />;
   }
 
   // Queue Empty State
@@ -517,6 +510,42 @@ function ReviewPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ReviewCardSkeleton() {
+  return (
+    <div className="max-w-xl mx-auto space-y-5 animate-pulse">
+      <div className="flex items-center justify-between glass-panel px-4 py-3 rounded-2xl bg-black/40 border border-[var(--color-border)]/40">
+        <div className="w-28 h-4 rounded bg-white/10" />
+        <div className="w-40 h-4 rounded bg-white/10" />
+      </div>
+
+      <div className="glass-panel p-6 space-y-4 rounded-2xl bg-black/40 border border-white/10 h-[320px] flex flex-col justify-between">
+        <div className="space-y-3">
+          <div className="flex justify-between items-start">
+            <div className="w-36 h-7 rounded bg-white/10" />
+            <div className="w-16 h-5 rounded bg-white/10" />
+          </div>
+          <div className="w-24 h-4 rounded bg-white/5" />
+        </div>
+        <div className="space-y-2">
+          <div className="w-full h-3 rounded bg-white/5" />
+          <div className="w-5/6 h-3 rounded bg-white/5" />
+        </div>
+        <div className="w-32 h-3 rounded bg-white/10" />
+      </div>
+
+      <div className="glass-panel p-3.5 bg-black/60 border border-white/10 rounded-2xl space-y-2">
+        <div className="w-32 h-3 rounded bg-white/10 mx-auto" />
+        <div className="grid grid-cols-4 gap-2">
+          <div className="h-12 rounded-xl bg-white/5" />
+          <div className="h-12 rounded-xl bg-white/5" />
+          <div className="h-12 rounded-xl bg-white/5" />
+          <div className="h-12 rounded-xl bg-white/5" />
+        </div>
+      </div>
     </div>
   );
 }

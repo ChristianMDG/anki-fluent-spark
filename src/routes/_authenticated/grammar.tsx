@@ -297,19 +297,24 @@ function GrammarPage() {
   });
 
   async function handleResolvePattern(id: string) {
-    await (supabase as unknown as {
-      from: (t: string) => {
-        update: (vals: Record<string, unknown>) => {
-          eq: (col: string, val: string) => Promise<{ error: unknown }>;
+    qc.setQueryData<GrammarErrorPattern[]>(["grammar-error-patterns"], (old) =>
+      (old ?? []).filter((p) => p.id !== id),
+    );
+    try {
+      await (supabase as unknown as {
+        from: (t: string) => {
+          update: (vals: Record<string, unknown>) => {
+            eq: (col: string, val: string) => Promise<{ error: unknown }>;
+          };
         };
-      };
-    })
-      .from("grammar_error_patterns")
-      .update({ resolved: true })
-      .eq("id", id);
-
-    qc.invalidateQueries({ queryKey: ["grammar-error-patterns"] });
-    toast.success("Marked error pattern as resolved!");
+      })
+        .from("grammar_error_patterns")
+        .update({ resolved: true })
+        .eq("id", id);
+      toast.success("Marked error pattern as resolved!");
+    } catch {
+      qc.invalidateQueries({ queryKey: ["grammar-error-patterns"] });
+    }
   }
 
   async function handleStartSession() {

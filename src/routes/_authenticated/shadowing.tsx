@@ -675,62 +675,87 @@ function ShadowingPage() {
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 space-y-2">
-              {videos.data?.map((v) => {
-                const isActive = currentVideo?.id === v.id;
-                return (
-                  <div
-                    key={v.id}
-                    className={`grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-2.5 bg-black/30 border rounded-lg overflow-hidden group transition-colors ${isActive ? "border-[var(--color-gold)]/70 bg-[var(--color-gold)]/5" : "border-white/5 hover:border-white/15"}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void loadFromHistory(v)}
-                      className="contents text-left"
-                      aria-label={`Load ${v.title || "Untitled video"}`}
-                    >
-                      <div className="aspect-video bg-neutral-900 relative overflow-hidden">
-                        {v.thumbnail_url ? (
-                          <img
-                            src={v.thumbnail_url}
-                            alt=""
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center gap-1 h-full text-[8px] text-neutral-500 uppercase bg-gradient-to-br from-neutral-900 to-black">
-                            <Video size={13} className="opacity-60 text-[var(--color-crimson)]" />
-                            {v.source_type === "upload"
-                              ? "Local File"
-                              : v.source_type === "facebook"
-                                ? "Facebook"
-                                : "Stream"}
-                          </div>
-                        )}
-                        {isActive && (
-                          <span className="absolute top-1 left-1 font-audiowide text-[7px] px-1 py-0.5 rounded bg-[var(--color-gold)]/20 text-[var(--color-gold)] border border-[var(--color-gold)]/30">
-                            LIVE
-                          </span>
-                        )}
+              {videos.isLoading ? (
+                <>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-2.5 bg-black/30 border border-white/5 rounded-lg p-1.5 animate-pulse">
+                      <div className="aspect-video bg-white/10 rounded" />
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="h-3 bg-white/10 rounded w-3/4" />
+                        <div className="h-2.5 bg-white/5 rounded w-1/2" />
                       </div>
-                      <span className="min-w-0 text-[10px] font-mono truncate text-neutral-300 group-hover:text-white">
-                        {v.title || "Untitled Node"}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => void deleteVideo(v, e)}
-                      className="mr-2 p-1.5 rounded-md text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      aria-label={`Delete ${v.title || "video"}`}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                );
-              })}
-              {videos.data?.length === 0 && (
+                      <div className="w-6 h-6 rounded bg-white/5" />
+                    </div>
+                  ))}
+                </>
+              ) : videos.isError ? (
+                <div className="p-4 text-center space-y-2 text-xs text-red-300">
+                  <p>Could not load shadowing history.</p>
+                  <button
+                    type="button"
+                    onClick={() => videos.refetch()}
+                    className="px-3 py-1 rounded-md bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white font-mono text-[10px] uppercase transition cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (videos.data ?? []).length === 0 ? (
                 <div className="border border-dashed border-white/5 p-8 rounded-xl text-center text-neutral-600">
                   <Layers size={18} className="mx-auto mb-2 opacity-60" />
                   <p className="text-[10px] uppercase tracking-wider">No saved videos yet</p>
                 </div>
+              ) : (
+                videos.data?.map((v) => {
+                  const isActive = currentVideo?.id === v.id;
+                  return (
+                    <div
+                      key={v.id}
+                      className={`grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-2.5 bg-black/30 border rounded-lg overflow-hidden group transition-colors ${isActive ? "border-[var(--color-gold)]/70 bg-[var(--color-gold)]/5" : "border-white/5 hover:border-white/15"}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void loadFromHistory(v)}
+                        className="contents text-left"
+                        aria-label={`Load ${v.title || "Untitled video"}`}
+                      >
+                        <div className="aspect-video bg-neutral-900 relative overflow-hidden">
+                          {v.thumbnail_url ? (
+                            <img
+                              src={v.thumbnail_url}
+                              alt=""
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-1 h-full text-[8px] text-neutral-500 uppercase bg-gradient-to-br from-neutral-900 to-black">
+                              <Video size={13} className="opacity-60 text-[var(--color-crimson)]" />
+                              {v.source_type === "upload"
+                                ? "Local File"
+                                : v.source_type === "facebook"
+                                  ? "Facebook"
+                                  : "Stream"}
+                            </div>
+                          )}
+                          {isActive && (
+                            <span className="absolute top-1 left-1 font-audiowide text-[7px] px-1 py-0.5 rounded bg-[var(--color-gold)]/20 text-[var(--color-gold)] border border-[var(--color-gold)]/30">
+                              LIVE
+                            </span>
+                          )}
+                        </div>
+                        <span className="min-w-0 text-[10px] font-mono truncate text-neutral-300 group-hover:text-white">
+                          {v.title || "Untitled Node"}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => void deleteVideo(v, e)}
+                        className="mr-2 p-1.5 rounded-md text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        aria-label={`Delete ${v.title || "video"}`}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
 

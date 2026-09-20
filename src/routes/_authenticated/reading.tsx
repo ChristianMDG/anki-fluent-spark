@@ -362,13 +362,13 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounce search input
+  // Debounce search input (~300ms)
   function handleSearchChange(v: string) {
     setSearchQuery(v);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
       setDebouncedQuery(v);
-    }, 500);
+    }, 300);
   }
 
   useEffect(() => {

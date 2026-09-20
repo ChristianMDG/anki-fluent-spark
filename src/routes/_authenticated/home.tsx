@@ -133,36 +133,63 @@ function HomePage() {
           </div>
         </header>
 
+        {/* Error Fallback Banner */}
+        {stats.isError && (
+          <div className="glass-panel p-4 border-l-4 border-l-red-500 bg-red-950/20 backdrop-blur-md border border-red-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs text-red-200">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-red-400 shrink-0" />
+              <span>Failed to sync operational stats with server.</span>
+            </div>
+            <button
+              onClick={() => stats.refetch()}
+              className="px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-100 font-audiowide text-[10px] uppercase tracking-wider transition cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Stats Grid with tactical icons */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            icon={Layers}
-            value={stats.data?.cards ?? 0}
-            label="Total Cards"
-            change={`+${stats.data?.cardsWeek ?? 0} this week`}
-            to="/library"
-          />
-          <StatCard
-            icon={Play}
-            value={stats.data?.lessons ?? 0}
-            label="Lessons Completed"
-            change={`+${stats.data?.lessonsWeek ?? 0} this week`}
-            to="/library"
-          />
-          <StatCard
-            icon={Sparkles}
-            value={stats.data?.videos ?? 0}
-            label="Shadowing Vault"
-            change={`+${stats.data?.videosWeek ?? 0} this week`}
-            to="/shadowing"
-          />
-          <StatCard
-            icon={Target}
-            value={dueCount}
-            label="Cards Due for Review"
-            change={dueCount > 0 ? "urgent" : "You're all caught up"}
-            to="/review"
-          />
+          {stats.isLoading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <StatCard
+                icon={Layers}
+                value={stats.data?.cards ?? 0}
+                label="Total Cards"
+                change={`+${stats.data?.cardsWeek ?? 0} this week`}
+                to="/library"
+              />
+              <StatCard
+                icon={Play}
+                value={stats.data?.lessons ?? 0}
+                label="Lessons Completed"
+                change={`+${stats.data?.lessonsWeek ?? 0} this week`}
+                to="/library"
+              />
+              <StatCard
+                icon={Sparkles}
+                value={stats.data?.videos ?? 0}
+                label="Shadowing Vault"
+                change={`+${stats.data?.videosWeek ?? 0} this week`}
+                to="/shadowing"
+              />
+              <StatCard
+                icon={Target}
+                value={dueCount}
+                label="Cards Due for Review"
+                change={dueCount > 0 ? "urgent" : "You're all caught up"}
+                to="/review"
+              />
+            </>
+          )}
         </div>
 
         {/* Tactical Bento Grid */}
@@ -188,6 +215,21 @@ function HomePage() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="glass-panel p-4 border bg-[#120403]/60 border-[var(--color-border)]/30 rounded-2xl animate-pulse space-y-3 h-full">
+      <div className="flex items-center justify-between">
+        <div className="w-10 h-10 rounded-xl bg-white/10" />
+        <div className="w-16 h-3 rounded bg-white/10" />
+      </div>
+      <div className="space-y-1 pt-1">
+        <div className="w-12 h-6 rounded bg-white/10" />
+        <div className="w-24 h-3 rounded bg-white/5" />
       </div>
     </div>
   );
