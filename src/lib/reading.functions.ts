@@ -396,11 +396,14 @@ export interface GutendexResponse {
 export const searchGutendex = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: { query?: string; page?: number }) =>
+    (d: { query?: string; topic?: string; sort?: string; page?: number; ids?: string }) =>
       z
         .object({
           query: z.string().max(200).optional(),
+          topic: z.string().max(100).optional(),
+          sort: z.enum(["popular", "ascending", "descending"]).optional(),
           page: z.number().int().positive().optional(),
+          ids: z.string().max(300).optional(),
         })
         .parse(d),
   )
@@ -410,6 +413,9 @@ export const searchGutendex = createServerFn({ method: "POST" })
       page: String(data.page ?? 1),
     });
     if (data.query?.trim()) params.set("search", data.query.trim());
+    if (data.topic?.trim()) params.set("topic", data.topic.trim());
+    if (data.sort) params.set("sort", data.sort);
+    if (data.ids?.trim()) params.set("ids", data.ids.trim());
 
     const res = await fetch(`https://gutendex.com/books?${params.toString()}`, {
       headers: { "User-Agent": "I-Speak-App/1.0 (educational, public-domain)" },
@@ -462,20 +468,24 @@ export const getOrEstimateBookMetadata = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<BookMetadataResult> => {
     // 1. Check Supabase cache table
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: cached } = await (supabase as any)
+      const { data: cached } = await supabase
         .from("book_level_estimates")
         .select("estimated_level, confidence, description, word_count")
         .eq("gutenberg_book_id", data.bookId)
         .maybeSingle();
 
       if (cached && cached.estimated_level && cached.description) {
+        const est = (["A1", "A2", "B1", "B2", "C1", "C2"].includes(cached.estimated_level)
+          ? cached.estimated_level
+          : "B2") as "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+        const confVal = (["low", "medium", "high"].includes(cached.confidence ?? "")
+          ? cached.confidence
+          : "medium") as "low" | "medium" | "high";
+
         return {
           gutenbergBookId: data.bookId,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          estimatedLevel: cached.estimated_level as any,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          confidence: (cached.confidence as any) ?? "medium",
+          estimatedLevel: est,
+          confidence: confVal,
           description: cached.description,
           wordCount: cached.word_count ?? 45000,
         };
@@ -506,12 +516,10 @@ export const getOrEstimateBookMetadata = createServerFn({ method: "POST" })
           wordCount?: number;
         };
         if (parsed.estimatedLevel && ["A1", "A2", "B1", "B2", "C1", "C2"].includes(parsed.estimatedLevel)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          estLevel = parsed.estimatedLevel as any;
+          estLevel = parsed.estimatedLevel as "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
         }
         if (parsed.confidence && ["low", "medium", "high"].includes(parsed.confidence)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          conf = parsed.confidence as any;
+          conf = parsed.confidence as "low" | "medium" | "high";
         }
         if (parsed.description && parsed.description.trim().length > 10) {
           desc = parsed.description.trim();
@@ -526,8 +534,7 @@ export const getOrEstimateBookMetadata = createServerFn({ method: "POST" })
 
     // 3. Cache result in Supabase
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("book_level_estimates").upsert(
+      await supabase.from("book_level_estimates").upsert(
         {
           gutenberg_book_id: data.bookId,
           estimated_level: estLevel,
@@ -559,8 +566,7 @@ export const fetchBatchBookLevels = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     if (data.bookIds.length === 0) return { estimates: {} };
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: rows } = await (supabase as any)
+      const { data: rows } = await supabase
         .from("book_level_estimates")
         .select("gutenberg_book_id, estimated_level")
         .in("gutenberg_book_id", data.bookIds);

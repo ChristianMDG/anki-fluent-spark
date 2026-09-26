@@ -32,26 +32,23 @@ import {
   CheckCircle2,
   AlertCircle,
   Maximize2,
-  Minimize2,
   Type,
   Palette,
-  Columns,
   Square,
   Bookmark,
   BookmarkCheck,
   Settings,
   Volume2,
-  VolumeX,
   Play,
   Pause,
   List,
   Sliders,
-  Sun,
-  Moon,
-  Trash2,
+  RotateCcw,
+  User,
+  Clock,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
-
 
 // ---------------------------------------------------------------------------
 // Route
@@ -62,10 +59,58 @@ export const Route = createFileRoute("/_authenticated/reading")({
 });
 
 // ---------------------------------------------------------------------------
+// Types & Interfaces
+// ---------------------------------------------------------------------------
+
+interface TopicCategory {
+  id: string;
+  label: string;
+  queryTopic: string;
+  icon: string;
+  color: string;
+}
+
+const TOPIC_CATEGORIES: TopicCategory[] = [
+  { id: "fiction", label: "Fiction", queryTopic: "fiction", icon: "📚", color: "from-amber-500/20 to-orange-500/10" },
+  { id: "adventure", label: "Adventure", queryTopic: "adventure", icon: "⚔️", color: "from-red-500/20 to-amber-500/10" },
+  { id: "romance", label: "Romance", queryTopic: "romance", icon: "🌹", color: "from-rose-500/20 to-pink-500/10" },
+  { id: "mystery", label: "Mystery & Crime", queryTopic: "detective", icon: "🔍", color: "from-purple-500/20 to-indigo-500/10" },
+  { id: "philosophy", label: "Philosophy", queryTopic: "philosophy", icon: "🧠", color: "from-blue-500/20 to-cyan-500/10" },
+  { id: "poetry", label: "Poetry", queryTopic: "poetry", icon: "✍️", color: "from-emerald-500/20 to-teal-500/10" },
+  { id: "science", label: "Science & Sci-Fi", queryTopic: "science", icon: "🚀", color: "from-sky-500/20 to-blue-500/10" },
+  { id: "history", label: "History", queryTopic: "history", icon: "🏛️", color: "from-yellow-500/20 to-amber-500/10" },
+  { id: "children", label: "Children's", queryTopic: "children", icon: "🧸", color: "from-lime-500/20 to-green-500/10" },
+  { id: "drama", label: "Plays & Drama", queryTopic: "drama", icon: "🎭", color: "from-fuchsia-500/20 to-purple-500/10" },
+];
+
+export type SortMode = "popular" | "title" | "author";
+
+interface ProgressItem {
+  id: string;
+  user_id: string;
+  gutenberg_book_id: number;
+  book_title: string;
+  current_chunk_index: number;
+  total_chunks: number;
+  updated_at: string | null;
+}
+
+interface CachedBookData {
+  bookId: number;
+  rawText: string;
+  targetWords: number;
+  pages: string[];
+}
+
+// Global in-memory cache for loaded book texts & computed pagination
+const bookTextCache = new Map<number, CachedBookData>();
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function getBookCover(book: GutendexBook): string | null {
+  if (!book || !book.formats) return null;
   for (const key of Object.keys(book.formats)) {
     if (key.includes("image/jpeg") || key === "image/jpeg") {
       return book.formats[key];
@@ -75,13 +120,18 @@ function getBookCover(book: GutendexBook): string | null {
 }
 
 function getBookTextUrl(book: GutendexBook): string {
-  // Always return canonical Gutenberg HTTPS text cache URL for this book ID
+  if (!book || !book.formats) return "";
+  for (const [key, val] of Object.entries(book.formats)) {
+    if (key.startsWith("text/plain") && val) {
+      return val.replace(/^http:/, "https:");
+    }
+  }
   return `https://www.gutenberg.org/cache/epub/${book.id}/pg${book.id}.txt`;
 }
 
-
 function getBookAuthors(book: GutendexBook): string {
-  return book.authors.map((a) => a.name).join(", ") || "Unknown Author";
+  if (!book.authors || book.authors.length === 0) return "Unknown Author";
+  return book.authors.map((a) => a.name.split(",").reverse().join(" ").trim()).join(", ");
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +148,7 @@ function useCurrentLevel(): string {
         } = await supabase.auth.getUser();
         if (!user) return null;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: profile, error } = await (supabase as any)
+        const { data: profile, error } = await supabase
           .from("learner_profile")
           .select("current_level")
           .eq("user_id", user.id)
@@ -114,7 +163,6 @@ function useCurrentLevel(): string {
   });
   return (data as { current_level: string } | null)?.current_level ?? "B1";
 }
-
 
 // ---------------------------------------------------------------------------
 // View state
@@ -154,25 +202,23 @@ function ReadingPage() {
 interface BookCardProps {
   book: GutendexBook;
   onClick: (book: GutendexBook) => void;
+  onAuthorClick?: (author: string) => void;
   estimatedLevel?: string;
 }
 
-function BookCard({ book, onClick, estimatedLevel }: BookCardProps) {
-  const cover = getBookCover(book);
+function BookCard({ book, onClick, onAuthorClick, estimatedLevel }: BookCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const cover = imageError ? null : getBookCover(book);
   const authors = getBookAuthors(book);
   const hasText = !!getBookTextUrl(book);
 
   return (
-    <button
-      id={`book-card-${book.id}`}
-      onClick={() => onClick(book)}
-      disabled={!hasText}
-      className={`group glass-panel-soft p-0 overflow-hidden text-left flex flex-col transition-all duration-300 rounded-2xl relative ${
+    <div
+      className={`group glass-panel-soft p-0 overflow-hidden text-left flex flex-col transition-all duration-300 rounded-2xl relative motion-reduce:transition-none ${
         hasText
-          ? "hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(237,28,36,0.2)] hover:border-[var(--color-crimson)]/50 cursor-pointer"
-          : "opacity-50 cursor-not-allowed"
+          ? "hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(237,28,36,0.2)] hover:border-[var(--color-crimson)]/50"
+          : "opacity-50"
       }`}
-      title={!hasText ? "No readable text available for this book" : book.title}
     >
       {/* Level badge */}
       {estimatedLevel && (
@@ -184,38 +230,72 @@ function BookCard({ book, onClick, estimatedLevel }: BookCardProps) {
         </span>
       )}
 
-      {/* Cover */}
-      <div className="w-full aspect-[2/3] bg-black/40 overflow-hidden flex-shrink-0 relative">
+      {/* Cover image or clean styled placeholder */}
+      <button
+        id={`book-card-${book.id}`}
+        onClick={() => onClick(book)}
+        disabled={!hasText}
+        className="w-full aspect-[2/3] bg-black/40 overflow-hidden flex-shrink-0 relative cursor-pointer text-left focus:outline-none"
+        title={!hasText ? "No readable text available for this book" : book.title}
+      >
         {cover ? (
           <img
             src={cover}
             alt={`Cover of ${book.title}`}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={() => setImageError(true)}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#1a0808] to-[#2d0f0f]">
-            <BookOpen size={36} className="text-[var(--color-crimson)]/40" />
+          <div className="w-full h-full flex flex-col justify-between p-4 bg-gradient-to-br from-[#1a0808] via-[#2a1010] to-[#120606] relative border-b border-white/5">
+            <div className="w-full h-1 bg-amber-500/40 rounded-full opacity-60" />
+            <div className="my-auto space-y-2 text-center">
+              <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                <BookOpen size={20} />
+              </div>
+              <p className="text-xs font-serif font-semibold text-white/90 line-clamp-3 leading-snug px-1">
+                {book.title}
+              </p>
+              <p className="text-[10px] text-amber-400/80 font-mono truncate px-1">{authors}</p>
+            </div>
+            <div className="w-full h-1 bg-amber-500/40 rounded-full opacity-60" />
           </div>
         )}
         {!hasText && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <span className="label-mono text-[10px] text-neutral-400">No text available</span>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
+            <span className="label-mono text-[10px] text-neutral-300 bg-black/70 px-2 py-1 rounded">No text available</span>
           </div>
         )}
-      </div>
+      </button>
 
       {/* Info */}
       <div className="p-3 flex-1 flex flex-col gap-1 min-h-0">
-        <p className="text-sm font-semibold leading-tight line-clamp-2 text-white group-hover:text-[var(--color-gold)] transition-colors duration-200">
+        <button
+          onClick={() => onClick(book)}
+          disabled={!hasText}
+          className="text-left font-semibold text-sm leading-snug line-clamp-2 text-white group-hover:text-[var(--color-gold)] transition-colors duration-200 cursor-pointer"
+        >
           {book.title}
-        </p>
-        <p className="text-xs text-neutral-400 line-clamp-1">{authors}</p>
-        <p className="label-mono text-[9px] mt-auto text-neutral-500">
+        </button>
+
+        {onAuthorClick ? (
+          <button
+            onClick={() => onAuthorClick(authors)}
+            className="text-left text-xs text-neutral-400 hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer flex items-center gap-1"
+            title={`Browse works by ${authors}`}
+          >
+            <User size={10} className="shrink-0 text-neutral-500" />
+            <span className="truncate">{authors}</span>
+          </button>
+        ) : (
+          <p className="text-xs text-neutral-400 line-clamp-1">{authors}</p>
+        )}
+
+        <p className="label-mono text-[9px] mt-auto text-neutral-500 pt-1">
           {book.download_count.toLocaleString()} downloads
         </p>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -223,14 +303,17 @@ function BookPreviewModal({
   book,
   onClose,
   onStartReading,
+  onAuthorClick,
 }: {
   book: GutendexBook;
   onClose: () => void;
   onStartReading: (book: GutendexBook) => void;
+  onAuthorClick: (author: string) => void;
 }) {
   const getMetadataFn = useServerFn(getOrEstimateBookMetadata);
   const authors = getBookAuthors(book);
-  const cover = getBookCover(book);
+  const [imageError, setImageError] = useState(false);
+  const cover = imageError ? null : getBookCover(book);
 
   const { data: metadata, isLoading } = useQuery({
     queryKey: ["book-metadata-preview", book.id],
@@ -265,12 +348,18 @@ function BookPreviewModal({
 
         <div className="flex flex-col sm:flex-row gap-5 items-start">
           {/* Cover */}
-          <div className="w-28 sm:w-36 aspect-[2/3] bg-black/40 rounded-xl overflow-hidden shrink-0 border border-white/10 shadow-lg">
+          <div className="w-28 sm:w-36 aspect-[2/3] bg-black/40 rounded-xl overflow-hidden shrink-0 border border-white/10 shadow-lg relative">
             {cover ? (
-              <img src={cover} alt={book.title} className="w-full h-full object-cover" />
+              <img
+                src={cover}
+                alt={book.title}
+                onError={() => setImageError(true)}
+                className="w-full h-full object-cover"
+              />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-                <BookOpen size={32} className="text-amber-500/40" />
+              <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-gradient-to-br from-[#1a0808] to-[#2d0f0f] text-center">
+                <BookOpen size={32} className="text-amber-500/50 mb-2" />
+                <p className="text-[10px] font-serif font-semibold text-white/80 line-clamp-3">{book.title}</p>
               </div>
             )}
           </div>
@@ -287,8 +376,22 @@ function BookPreviewModal({
             </div>
 
             <h2 className="text-xl font-bold text-white leading-snug">{book.title}</h2>
-            <p className="text-xs text-neutral-300 font-medium">{authors}</p>
-            <p className="label-mono text-[10px] text-neutral-400">
+
+            {/* Clickable Author */}
+            <button
+              onClick={() => {
+                onClose();
+                onAuthorClick(authors);
+              }}
+              className="text-xs text-amber-400 hover:text-amber-300 hover:underline font-medium cursor-pointer flex items-center gap-1.5"
+              title="Search all works by this author"
+            >
+              <User size={12} />
+              <span>{authors}</span>
+              <span className="text-[10px] text-neutral-400 font-normal">(browse author →)</span>
+            </button>
+
+            <p className="label-mono text-[10px] text-neutral-400 pt-1">
               {book.download_count.toLocaleString()} Gutenberg downloads
             </p>
           </div>
@@ -325,7 +428,7 @@ function BookPreviewModal({
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs border border-white/15 text-neutral-300 hover:text-white hover:bg-white/5 transition"
+              className="px-4 py-2 rounded-xl text-xs border border-white/15 text-neutral-300 hover:text-white hover:bg-white/5 transition cursor-pointer"
             >
               Cancel
             </button>
@@ -347,12 +450,12 @@ function BookPreviewModal({
 
 function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => void }) {
   const userLevel = useCurrentLevel();
-  const [selectedLevel, setSelectedLevel] = useState<string>("B1");
-  const [previewBook, setPreviewBook] = useState<GutendexBook | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>("popular");
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
-  useEffect(() => {
-    if (userLevel) setSelectedLevel(userLevel);
-  }, [userLevel]);
+  const [previewBook, setPreviewBook] = useState<GutendexBook | null>(null);
 
   const suggestFn = useServerFn(suggestBooksForLevel);
   const searchGutendexFn = useServerFn(searchGutendex);
@@ -362,12 +465,13 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounce search input (~300ms)
+  // Debounce search input (300ms)
   function handleSearchChange(v: string) {
     setSearchQuery(v);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => {
       setDebouncedQuery(v);
+      setCurrentPage(1);
     }, 300);
   }
 
@@ -377,54 +481,153 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
     };
   }, []);
 
-  // AI suggestions → resolved through Gutendex server function for selectedLevel
-  const suggestionsQuery = useQuery({
-    queryKey: ["book-suggestions", selectedLevel],
-    queryFn: async (): Promise<GutendexBook[]> => {
-      const { suggestions } = await suggestFn({
-        data: { level: selectedLevel as "A1" | "A2" | "B1" | "B2" | "C1" | "C2" },
-      });
-      if (!suggestions.length) return [];
+  // Continue Reading shelf query from Supabase reading_progress table
+  const continueReadingQuery = useQuery({
+    queryKey: ["reading-progress-shelf"],
+    queryFn: async (): Promise<ProgressItem[]> => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return [];
 
-      // Resolve each suggestion through Gutendex (parallel, max 8)
-      const resolved = await Promise.allSettled(
-        suggestions.slice(0, 8).map(async (s) => {
-          const query = `${s.title} ${s.author}`;
-          const res = await searchGutendexFn({ data: { query, page: 1 } });
-          const match = res.results.find((b) => getBookTextUrl(b));
-          return match ?? null;
-        }),
-      );
+        const { data, error } = await supabase
+          .from("reading_progress")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false })
+          .limit(6);
 
-      return resolved
-        .filter(
-          (r): r is PromiseFulfilledResult<GutendexBook> =>
-            r.status === "fulfilled" && r.value !== null,
-        )
-        .map((r) => r.value);
+        if (error || !data) return [];
+        return data as ProgressItem[];
+      } catch {
+        return [];
+      }
     },
+    staleTime: 10_000,
+  });
+
+  // Resolve Gutenberg book details for Continue Reading shelf items
+  const continueReadingBookIds = useMemo(() => {
+    return (continueReadingQuery.data ?? []).map((p) => p.gutenberg_book_id);
+  }, [continueReadingQuery.data]);
+
+  const resolvedContinueBooksQuery = useQuery({
+    queryKey: ["resolved-continue-books", continueReadingBookIds],
+    queryFn: async (): Promise<Record<number, GutendexBook>> => {
+      if (!continueReadingBookIds.length) return {};
+      try {
+        const res = await searchGutendexFn({
+          data: { ids: continueReadingBookIds.join(",") },
+        });
+        const map: Record<number, GutendexBook> = {};
+        for (const book of res.results) {
+          map[book.id] = book;
+        }
+        return map;
+      } catch {
+        return {};
+      }
+    },
+    enabled: continueReadingBookIds.length > 0,
     staleTime: 5 * 60_000,
   });
 
-  // Search results (only when query present)
-  const searchResultsQuery = useQuery({
-    queryKey: ["gutendex-search", debouncedQuery],
-    queryFn: async (): Promise<GutendexBook[]> => {
-      if (!debouncedQuery.trim()) return [];
-      const res = await searchGutendexFn({ data: { query: debouncedQuery.trim(), page: 1 } });
-      return res.results;
+  // Main Gutendex books query (search, topic, or level suggestions)
+  const isSearching = !!debouncedQuery.trim();
+
+  const booksQuery = useQuery({
+    queryKey: [
+      "gutendex-browse",
+      debouncedQuery,
+      selectedTopic,
+      selectedLevel,
+      currentPage,
+      sortMode,
+    ],
+    queryFn: async (): Promise<GutendexResponse> => {
+      let gutendexSortParam: "popular" | "ascending" | "descending" | undefined = undefined;
+      if (sortMode === "popular") gutendexSortParam = "popular";
+
+      if (debouncedQuery.trim()) {
+        return searchGutendexFn({
+          data: {
+            query: debouncedQuery.trim(),
+            topic: selectedTopic ?? undefined,
+            sort: gutendexSortParam,
+            page: currentPage,
+          },
+        });
+      }
+
+      if (selectedTopic) {
+        return searchGutendexFn({
+          data: {
+            topic: selectedTopic,
+            sort: gutendexSortParam,
+            page: currentPage,
+          },
+        });
+      }
+
+      // Default suggestions for CEFR level (or general popular)
+      const targetLvl = selectedLevel || userLevel || "B1";
+      const { suggestions } = await suggestFn({
+        data: { level: targetLvl as "A1" | "A2" | "B1" | "B2" | "C1" | "C2" },
+      });
+
+      if (suggestions.length > 0) {
+        const resolved = await Promise.allSettled(
+          suggestions.slice(0, 12).map(async (s) => {
+            const query = `${s.title} ${s.author}`;
+            const res = await searchGutendexFn({ data: { query, page: 1 } });
+            const match = res.results.find((b) => getBookTextUrl(b));
+            return match ?? null;
+          }),
+        );
+
+        const results = resolved
+          .filter(
+            (r): r is PromiseFulfilledResult<GutendexBook> =>
+              r.status === "fulfilled" && r.value !== null,
+          )
+          .map((r) => r.value);
+
+        return {
+          count: results.length,
+          next: null,
+          previous: null,
+          results,
+        };
+      }
+
+      // Fallback popular books query
+      return searchGutendexFn({
+        data: {
+          sort: "popular",
+          page: currentPage,
+        },
+      });
     },
-    enabled: !!debouncedQuery.trim(),
-    staleTime: 60_000,
+    staleTime: 3 * 60_000,
   });
+
+  // Process & sort results
+  const rawResults = booksQuery.data?.results ?? [];
+  const processedResults = useMemo(() => {
+    const list = [...rawResults];
+    if (sortMode === "title") {
+      list.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortMode === "author") {
+      list.sort((a, b) => getBookAuthors(a).localeCompare(getBookAuthors(b)));
+    }
+    return list;
+  }, [rawResults, sortMode]);
 
   // Batch difficulty lookup for displayed books
   const allDisplayedIds = useMemo(() => {
-    const list = debouncedQuery.trim()
-      ? searchResultsQuery.data ?? []
-      : suggestionsQuery.data ?? [];
-    return list.map((b) => b.id);
-  }, [debouncedQuery, searchResultsQuery.data, suggestionsQuery.data]);
+    return processedResults.map((b) => b.id);
+  }, [processedResults]);
 
   const batchLevelsQuery = useQuery({
     queryKey: ["batch-book-levels", allDisplayedIds],
@@ -438,34 +641,250 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
   });
 
   const levelMap = batchLevelsQuery.data ?? {};
-  const isSearching = !!debouncedQuery.trim();
+  const totalCount = booksQuery.data?.count ?? 0;
+  const hasNextPage = !!booksQuery.data?.next;
+  const hasPrevPage = currentPage > 1;
+
+  function handleSelectTopic(topicId: string) {
+    if (selectedTopic === topicId) {
+      setSelectedTopic(null);
+    } else {
+      setSelectedTopic(topicId);
+    }
+    setCurrentPage(1);
+  }
+
+  function handleBrowseAuthor(authorName: string) {
+    setSelectedTopic(null);
+    setSearchQuery(authorName);
+    setDebouncedQuery(authorName);
+    setCurrentPage(1);
+  }
+
+  function handleContinueBookClick(progressItem: ProgressItem) {
+    const resolved = resolvedContinueBooksQuery.data?.[progressItem.gutenberg_book_id];
+    if (resolved) {
+      onSelectBook(resolved);
+    } else {
+      // Fallback synthetic book object if API lookup hasn't returned yet
+      const fallbackBook: GutendexBook = {
+        id: progressItem.gutenberg_book_id,
+        title: progressItem.book_title || "Classic Book",
+        authors: [{ name: "Author", birth_year: null, death_year: null }],
+        subjects: [],
+        languages: ["en"],
+        download_count: 0,
+        formats: {
+          "text/plain; charset=utf-8": `https://www.gutenberg.org/cache/epub/${progressItem.gutenberg_book_id}/pg${progressItem.gutenberg_book_id}.txt`,
+        },
+      };
+      onSelectBook(fallbackBook);
+    }
+  }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 motion-reduce:animate-none">
       {/* Header */}
       <div>
         <p className="label-mono text-[var(--color-gold)]">Reading Room</p>
-        <h1 className="text-3xl md:text-4xl font-bold mt-1">Public-Domain Library</h1>
-        <p className="text-muted-foreground mt-2 max-w-xl">
+        <h1 className="text-3xl md:text-4xl font-bold mt-1">Public-Domain Digital Library</h1>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
           Browse and read classic English literature from Project Gutenberg, with AI-powered
-          vocabulary support, comprehension checks, and instant card generation.
+          vocabulary support, comprehension checks, genre discovery, and instant card generation.
         </p>
       </div>
 
-      {/* CEFR Level Filter Pills */}
-      <div className="space-y-2">
-        <label className="label-mono text-neutral-400 text-xs block">Filter books by CEFR Level</label>
-        <div className="flex flex-wrap gap-2">
+      {/* CONTINUE READING SHELF */}
+      {(continueReadingQuery.data ?? []).length > 0 && (
+        <section aria-label="Continue reading shelf" className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-amber-400" />
+            <h2 className="text-lg font-bold text-white">Continue Reading</h2>
+            <span className="text-xs text-neutral-400 font-mono">
+              ({continueReadingQuery.data?.length} book{continueReadingQuery.data?.length !== 1 ? "s" : ""})
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {continueReadingQuery.data?.map((item) => {
+              const percent = item.total_chunks > 0
+                ? Math.round(((item.current_chunk_index + 1) / item.total_chunks) * 100)
+                : 0;
+              const resolvedBook = resolvedContinueBooksQuery.data?.[item.gutenberg_book_id];
+              const cover = resolvedBook ? getBookCover(resolvedBook) : null;
+              const author = resolvedBook ? getBookAuthors(resolvedBook) : "Project Gutenberg Classic";
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleContinueBookClick(item)}
+                  className="glass-panel-soft p-3.5 rounded-2xl flex items-center gap-4 text-left hover:border-amber-500/50 hover:bg-white/[0.04] transition duration-200 cursor-pointer group relative overflow-hidden"
+                >
+                  {/* Cover */}
+                  <div className="w-14 aspect-[2/3] bg-black/40 rounded-lg overflow-hidden shrink-0 border border-white/10 shadow relative">
+                    {cover ? (
+                      <img src={cover} alt={item.book_title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+                        <BookOpen size={18} className="text-amber-500/50" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <p className="text-sm font-semibold text-white truncate group-hover:text-amber-300 transition-colors">
+                      {item.book_title}
+                    </p>
+                    <p className="text-xs text-neutral-400 truncate">{author}</p>
+
+                    {/* Progress bar */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-amber-300">
+                        <span>Page {item.current_chunk_index + 1} of {item.total_chunks || 1}</span>
+                        <span>{percent}%</span>
+                      </div>
+                      <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-300"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* GENRE / SUBJECT BROWSING TILES */}
+      <section aria-label="Browse by category" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers size={16} className="text-[var(--color-gold)]" />
+            <h2 className="text-lg font-bold text-white">Explore Genres & Topics</h2>
+          </div>
+          {selectedTopic && (
+            <button
+              onClick={() => setSelectedTopic(null)}
+              className="text-xs text-amber-400 hover:text-amber-300 transition flex items-center gap-1"
+            >
+              <X size={12} /> Clear topic filter
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+          {TOPIC_CATEGORIES.map((cat) => {
+            const active = selectedTopic === cat.queryTopic;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => handleSelectTopic(cat.queryTopic)}
+                className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex items-center gap-3 relative overflow-hidden ${
+                  active
+                    ? "border-amber-400 bg-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.25)] text-white scale-[1.02]"
+                    : "border-white/10 bg-black/40 hover:border-white/25 hover:bg-white/5 text-neutral-300 hover:text-white"
+                }`}
+              >
+                <span className="text-xl shrink-0">{cat.icon}</span>
+                <span className="text-xs font-semibold truncate">{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* SEARCH BAR & FILTERS */}
+      <div className="space-y-4 bg-black/40 p-4 rounded-3xl border border-white/10 backdrop-blur-md">
+        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+          {/* Search input */}
+          <div className="relative flex-1">
+            <Search
+              size={18}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
+            />
+            <input
+              id="reading-search-input"
+              type="search"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search books by title, author, or keyword…"
+              className="w-full bg-black/50 border border-white/15 rounded-2xl pl-12 pr-10 py-3 text-white placeholder-neutral-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 transition-all text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setDebouncedQuery("");
+                  setCurrentPage(1);
+                }}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors p-1"
+                aria-label="Clear search"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Sort selection */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-neutral-400 font-mono hidden sm:inline">Sort:</span>
+            <div className="flex p-1 bg-black/60 rounded-xl border border-white/10">
+              {(
+                [
+                  ["popular", "Popular"],
+                  ["title", "Title (A-Z)"],
+                  ["author", "Author"],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setSortMode(mode)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                    sortMode === mode
+                      ? "bg-amber-500/25 border border-amber-400/40 text-amber-300 font-bold"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* CEFR Level Filter Pills */}
+        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-white/5">
+          <span className="label-mono text-neutral-400 text-xs">CEFR Level:</span>
+          <button
+            onClick={() => {
+              setSelectedLevel(null);
+              setCurrentPage(1);
+            }}
+            className={`px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
+              selectedLevel === null
+                ? "bg-white/20 border border-white/40 text-white"
+                : "border border-white/10 text-neutral-400 hover:text-white"
+            }`}
+          >
+            All
+          </button>
           {CEFR_LEVELS.map((lvl) => {
             const active = selectedLevel === lvl;
             return (
               <button
                 key={lvl}
-                onClick={() => setSelectedLevel(lvl)}
-                className={`px-4 py-1.5 rounded-full border text-xs font-bold transition-all cursor-pointer ${
+                onClick={() => {
+                  setSelectedLevel(lvl);
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1 rounded-full border text-xs font-bold transition-all cursor-pointer ${
                   active
-                    ? "border-[color:var(--color-crimson-glow)] bg-[color:var(--color-crimson)]/20 text-white shadow-[0_0_12px_rgba(237,28,36,0.3)] scale-105"
-                    : "border-[color:var(--color-border)] text-neutral-400 hover:border-white/30 hover:text-white"
+                    ? "border-amber-400 bg-amber-500/20 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)] scale-105"
+                    : "border-white/10 text-neutral-400 hover:border-white/30 hover:text-white"
                 }`}
               >
                 {lvl}
@@ -475,128 +894,117 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search
-          size={18}
-          className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
-        />
-        <input
-          id="reading-search-input"
-          type="search"
-          value={searchQuery}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder={`Search classics by title, author, or keyword (filtered for ${selectedLevel})…`}
-          className="w-full bg-black/40 border border-[var(--color-border)]/60 rounded-2xl pl-12 pr-5 py-3.5 text-white placeholder-neutral-500 focus:outline-none focus:border-[var(--color-crimson)]/60 focus:ring-1 focus:ring-[var(--color-crimson)]/30 transition-all text-sm"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => {
-              setSearchQuery("");
-              setDebouncedQuery("");
-            }}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
-            aria-label="Clear search"
-          >
-            <X size={16} />
-          </button>
-        )}
-      </div>
-
-      {/* Search results */}
-      {isSearching && (
-        <section aria-label="Search results">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Search results</h2>
-            {searchResultsQuery.isLoading && (
-              <Loader2 size={16} className="animate-spin text-neutral-400" />
-            )}
-          </div>
-
-          {searchResultsQuery.isError && (
-            <div className="flex items-center gap-2 text-sm text-red-400 py-4">
-              <AlertCircle size={16} />
-              Could not reach Gutendex. Check your connection.
-            </div>
-          )}
-
-          {searchResultsQuery.data && searchResultsQuery.data.length === 0 && !searchResultsQuery.isLoading && (
-            <p className="text-muted-foreground text-sm py-4">
-              No results found for "{debouncedQuery}".
-            </p>
-          )}
-
-          {searchResultsQuery.data && searchResultsQuery.data.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {searchResultsQuery.data.map((book) => (
-                <BookCard
-                  key={book.id}
-                  book={book}
-                  onClick={(b) => setPreviewBook(b)}
-                  estimatedLevel={levelMap[book.id]}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Suggestions (shown when not searching) */}
-      {!isSearching && (
-        <section aria-label="Suggested books for your level">
-          <div className="flex items-center gap-3 mb-4">
-            <Sparkles size={16} className="text-[var(--color-gold)]" />
-            <h2 className="text-lg font-semibold">
-              Suggested for level{" "}
-              <span className="label-mono text-[var(--color-gold)] ml-2">{selectedLevel}</span>
+      {/* RESULTS SECTION */}
+      <section aria-label="Book results">
+        {/* Results bar header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold">
+              {isSearching
+                ? `Results for "${debouncedQuery}"`
+                : selectedTopic
+                  ? `Topic: ${TOPIC_CATEGORIES.find((c) => c.queryTopic === selectedTopic)?.label ?? selectedTopic}`
+                  : `Suggested Books for ${selectedLevel || userLevel || "B1"}`}
             </h2>
-            {suggestionsQuery.isLoading && (
-              <Loader2 size={16} className="animate-spin text-neutral-400" />
+            {booksQuery.isLoading && (
+              <Loader2 size={16} className="animate-spin text-amber-400" />
             )}
           </div>
 
-          {suggestionsQuery.isError && (
-            <div className="flex items-center gap-2 text-sm text-red-400 py-4">
-              <AlertCircle size={16} />
-              Could not load suggestions for {selectedLevel}.
-            </div>
-          )}
-
-          {suggestionsQuery.data && suggestionsQuery.data.length === 0 && !suggestionsQuery.isLoading && (
-            <p className="text-muted-foreground text-sm py-4">
-              No suggestions available for {selectedLevel} right now. Try searching for a title.
+          {totalCount > 0 && (
+            <p className="text-xs text-neutral-400 font-mono">
+              {totalCount.toLocaleString()} books available
             </p>
           )}
+        </div>
 
-          {suggestionsQuery.data && suggestionsQuery.data.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {suggestionsQuery.data.map((book) => (
-                <BookCard
-                  key={book.id}
-                  book={book}
-                  onClick={(b) => setPreviewBook(b)}
-                  estimatedLevel={levelMap[book.id] ?? selectedLevel}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Skeleton placeholders while loading */}
-          {suggestionsQuery.isLoading && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="glass-panel-soft rounded-2xl overflow-hidden animate-pulse">
-                  <div className="aspect-[2/3] bg-white/5" />
-                  <div className="p-3 space-y-2">
-                    <div className="h-3 bg-white/5 rounded w-4/5" />
-                    <div className="h-2 bg-white/5 rounded w-3/5" />
-                  </div>
+        {/* Loading state */}
+        {booksQuery.isLoading && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <div key={i} className="glass-panel-soft rounded-2xl overflow-hidden animate-pulse">
+                <div className="aspect-[2/3] bg-white/5" />
+                <div className="p-3 space-y-2">
+                  <div className="h-3 bg-white/5 rounded w-4/5" />
+                  <div className="h-2 bg-white/5 rounded w-3/5" />
                 </div>
-              ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error state */}
+        {booksQuery.isError && (
+          <div className="glass-panel border-red-500/30 p-8 rounded-3xl text-center space-y-4 my-6">
+            <AlertCircle size={32} className="text-red-400 mx-auto" />
+            <div className="space-y-1">
+              <p className="text-red-300 font-bold text-base">Could not fetch books from Gutendex</p>
+              <p className="text-xs text-neutral-400 max-w-md mx-auto">
+                Project Gutenberg or Gutendex service may be experiencing high traffic.
+              </p>
             </div>
-          )}
-        </section>
-      )}
+            <button
+              onClick={() => void booksQuery.refetch()}
+              className="btn-crimson px-5 py-2.5 rounded-xl text-xs font-semibold inline-flex items-center gap-2 cursor-pointer shadow-lg"
+            >
+              <RotateCcw size={14} /> Retry Search
+            </button>
+          </div>
+        )}
+
+        {/* Empty search results */}
+        {!booksQuery.isLoading && !booksQuery.isError && processedResults.length === 0 && (
+          <div className="glass-panel-soft p-12 text-center space-y-3 rounded-3xl my-6">
+            <BookOpen size={36} className="text-neutral-500 mx-auto" />
+            <p className="text-base font-semibold text-white">
+              {isSearching ? `No books found matching "${debouncedQuery}"` : "No books found"}
+            </p>
+            <p className="text-xs text-neutral-400 max-w-sm mx-auto">
+              Try searching for a different keyword or author name, or click one of the genre tiles above.
+            </p>
+          </div>
+        )}
+
+        {/* Book Grid */}
+        {!booksQuery.isLoading && !booksQuery.isError && processedResults.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {processedResults.map((book) => (
+              <BookCard
+                key={book.id}
+                book={book}
+                onClick={(b) => setPreviewBook(b)}
+                onAuthorClick={(author) => handleBrowseAuthor(author)}
+                estimatedLevel={levelMap[book.id] ?? (selectedLevel || undefined)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Pagination Bar */}
+        {!booksQuery.isLoading && (hasPrevPage || hasNextPage) && (
+          <div className="flex items-center justify-between pt-6 border-t border-white/10 mt-6">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={!hasPrevPage}
+              className="px-4 py-2 rounded-xl border border-white/15 text-xs font-semibold text-neutral-300 hover:text-white hover:bg-white/5 transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+            >
+              <ChevronLeft size={16} /> Previous Page
+            </button>
+
+            <span className="text-xs font-mono text-amber-300">
+              Page {currentPage}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((p) => p + 1)}
+              disabled={!hasNextPage}
+              className="px-4 py-2 rounded-xl border border-white/15 text-xs font-semibold text-neutral-300 hover:text-white hover:bg-white/5 transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+            >
+              Next Page <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+      </section>
 
       {/* Book Preview Modal */}
       {previewBook && (
@@ -607,6 +1015,7 @@ function BookBrowse({ onSelectBook }: { onSelectBook: (book: GutendexBook) => vo
             setPreviewBook(null);
             onSelectBook(b);
           }}
+          onAuthorClick={(author) => handleBrowseAuthor(author)}
         />
       )}
 
@@ -654,10 +1063,6 @@ interface PopoverState {
   loading: boolean;
   cardAdded: boolean;
 }
-
-// ---------------------------------------------------------------------------
-// Paper themes & typography options
-// ---------------------------------------------------------------------------
 
 type PaperThemeKey = "sepia" | "linen" | "dark" | "amber";
 type FontKey = "merriweather" | "playfair" | "lora" | "cinzel";
@@ -852,10 +1257,6 @@ function searchBookText(pages: string[], query: string): SearchResultItem[] {
   return results;
 }
 
-// ---------------------------------------------------------------------------
-// Text pagination helper — dynamic page fitting based on typography & device
-// ---------------------------------------------------------------------------
-
 function computeTargetWordsPerPage(
   fontSizeStep: FontSizeStep,
   lineSpacing: LineSpacingOption,
@@ -883,10 +1284,14 @@ function computeTargetWordsPerPage(
   return Math.max(40, words);
 }
 
-function paginateTextIntoPages(fullText: string, targetWordsPerPage: number = 180): string[] {
+// Chunked non-blocking async pagination pass to prevent thread hanging on large books
+async function paginateTextIntoPagesAsync(
+  fullText: string,
+  targetWordsPerPage: number = 180,
+  onProgress?: (progressMsg: string) => void
+): Promise<string[]> {
   let text = fullText;
 
-  // Strip Gutenberg legal preamble/postamble header lines if present to start directly at Chapter 1
   const startMatch = text.match(/\*\*\*\s*START OF TH(IS|E) PROJECT GUTENBERG EBOOK[^\*]*\*\*\*/i);
   if (startMatch && startMatch.index !== undefined) {
     text = text.slice(startMatch.index + startMatch[0].length);
@@ -905,11 +1310,12 @@ function paginateTextIntoPages(fullText: string, targetWordsPerPage: number = 18
   let currentParas: string[] = [];
   let currentWords = 0;
   const minWords = Math.min(60, Math.floor(targetWordsPerPage * 0.4));
+  const BATCH_SIZE = 120;
 
-  for (const para of rawParagraphs) {
+  for (let i = 0; i < rawParagraphs.length; i++) {
+    const para = rawParagraphs[i];
     const paraWords = para.split(/\s+/).length;
 
-    // If single paragraph is longer than target page length, break into sentence blocks
     if (paraWords > targetWordsPerPage) {
       const sentences = para.match(/[^.!?]+[.!?]+(\s+|$)/g) || [para];
       for (const sentence of sentences) {
@@ -933,6 +1339,14 @@ function paginateTextIntoPages(fullText: string, targetWordsPerPage: number = 18
         currentWords += paraWords;
       }
     }
+
+    if (i > 0 && i % BATCH_SIZE === 0) {
+      if (onProgress) {
+        const pct = Math.round((i / rawParagraphs.length) * 100);
+        onProgress(`Paginating layout (${pct}%)…`);
+      }
+      await new Promise((r) => setTimeout(r, 0));
+    }
   }
 
   if (currentParas.length > 0) {
@@ -953,7 +1367,9 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const [rawFullText, setRawFullText] = useState<string>("");
   const [pages, setPages] = useState<string[]>([]);
   const [pageIndex, setPageIndex] = useState<number>(0);
-  const [loadingText, setLoadingText] = useState(true);
+
+  const [loadingStage, setLoadingStage] = useState<"fetching" | "paginating" | "ready" | "error">("fetching");
+  const [loadingMessage, setLoadingMessage] = useState<string>("Fetching book from Project Gutenberg…");
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Reader customization state & preferences
@@ -966,8 +1382,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isFlipping, setIsFlipping] = useState<"next" | "prev" | null>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
-
-  // Focus mode state
   const [focusMode, setFocusMode] = useState<boolean>(false);
 
   // Panels state
@@ -1025,8 +1439,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
+        const { data } = await supabase
           .from("reading_preferences")
           .select("font_size, line_spacing, theme, read_aloud_rate")
           .eq("user_id", user.id)
@@ -1073,8 +1486,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
       const thKey = updates.themeKey ?? themeKey;
       const rate = updates.readAloudRate ?? readAloudRate;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("reading_preferences").upsert(
+      await supabase.from("reading_preferences").upsert(
         {
           user_id: user.id,
           font_size: fStep,
@@ -1097,8 +1509,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("reading_bookmarks")
         .select("*")
         .eq("user_id", user.id)
@@ -1127,8 +1538,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
       const existing = bookmarks.find((b) => b.chunk_index === pageIndex);
       if (existing) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("reading_bookmarks").delete().eq("id", existing.id);
+        await supabase.from("reading_bookmarks").delete().eq("id", existing.id);
         setBookmarks((prev) => prev.filter((b) => b.id !== existing.id));
         toast.success("Bookmark removed");
       } else {
@@ -1136,8 +1546,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         const snippet = pageText.slice(0, 45).replace(/\n/g, " ").trim();
         const label = snippet ? `"${snippet}…"` : `Page ${pageIndex + 1}`;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
           .from("reading_bookmarks")
           .insert({
             user_id: user.id,
@@ -1160,8 +1569,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 
   async function handleDeleteBookmark(bookmarkId: string) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("reading_bookmarks").delete().eq("id", bookmarkId);
+      await supabase.from("reading_bookmarks").delete().eq("id", bookmarkId);
       setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
       toast.success("Bookmark removed");
     } catch {
@@ -1188,15 +1596,14 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   }, [searchQuery, pages]);
 
   // Load & save reading progress
-  async function loadProgress() {
+  async function loadProgress(): Promise<number> {
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return 0;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("reading_progress")
         .select("current_chunk_index")
         .eq("user_id", user.id)
@@ -1216,8 +1623,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("reading_progress").upsert(
+      await supabase.from("reading_progress").upsert(
         {
           user_id: user.id,
           gutenberg_book_id: book.id,
@@ -1228,54 +1634,89 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
         },
         { onConflict: "user_id,gutenberg_book_id" },
       );
+
+      // Invalidate continue reading shelf query so home shelf updates instantly
+      qc.invalidateQueries({ queryKey: ["reading-progress-shelf"] });
     } catch {
-      // Ignore error if table does not exist yet
+      // Ignore error
     }
   }
 
-  // Fetch book text on mount & paginate
-  useEffect(() => {
+  // Main book text load & pagination function
+  const loadBookContent = useCallback(async () => {
     if (!textUrl) {
-      setLoadError("No readable text file found for this book.");
-      setLoadingText(false);
+      setLoadError("No readable plain-text format found for this book.");
+      setLoadingStage("error");
       return;
     }
 
-    let cancelled = false;
+    const targetWords = computeTargetWordsPerPage(fontSizeStep, lineSpacing, isMobile);
 
-    (async () => {
-      setLoadingText(true);
-      setLoadError(null);
-      try {
+    // 1. Check in-memory cache
+    const cached = bookTextCache.get(book.id);
+    if (cached && cached.rawText && cached.targetWords === targetWords && cached.pages.length > 0) {
+      setRawFullText(cached.rawText);
+      setPages(cached.pages);
+      setLoadingStage("ready");
+      const savedIdx = await loadProgress();
+      setPageIndex(Math.min(savedIdx, Math.max(0, cached.pages.length - 1)));
+      return;
+    }
+
+    setLoadingStage("fetching");
+    setLoadingMessage("Fetching full text from Project Gutenberg…");
+    setLoadError(null);
+
+    try {
+      let fullText = cached?.rawText || "";
+
+      if (!fullText) {
         const result = await fetchTextFn({ data: { bookId: book.id, textUrl } });
-        if (cancelled) return;
-
-        const fullText = result.chunks.join("\n\n");
-        setRawFullText(fullText);
-
-        const targetWords = computeTargetWordsPerPage(fontSizeStep, lineSpacing, isMobile);
-        const bookPages = paginateTextIntoPages(fullText, targetWords);
-        setPages(bookPages);
-
-        const savedIdx = await loadProgress();
-        setPageIndex(Math.min(savedIdx, Math.max(0, bookPages.length - 1)));
-      } catch (e) {
-        if (!cancelled) setLoadError((e as Error).message);
-      } finally {
-        if (!cancelled) setLoadingText(false);
+        fullText = result.chunks.join("\n\n");
       }
-    })();
 
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book.id, textUrl]);
+      setRawFullText(fullText);
+
+      setLoadingStage("paginating");
+      setLoadingMessage("Paginating text layout…");
+
+      const bookPages = await paginateTextIntoPagesAsync(
+        fullText,
+        targetWords,
+        (msg) => setLoadingMessage(msg)
+      );
+
+      if (!bookPages || bookPages.length === 0) {
+        throw new Error("No readable chapters or paragraphs found in this text.");
+      }
+
+      // Save to cache
+      bookTextCache.set(book.id, {
+        bookId: book.id,
+        rawText: fullText,
+        targetWords,
+        pages: bookPages,
+      });
+
+      setPages(bookPages);
+      setLoadingStage("ready");
+
+      const savedIdx = await loadProgress();
+      setPageIndex(Math.min(savedIdx, Math.max(0, bookPages.length - 1)));
+    } catch (e) {
+      setLoadError((e as Error).message || "Failed to download book text.");
+      setLoadingStage("error");
+    }
+  }, [book.id, textUrl, fontSizeStep, lineSpacing, isMobile]);
+
+  useEffect(() => {
+    void loadBookContent();
+  }, [loadBookContent]);
 
   // Dynamic re-pagination on typography/screen resize
   const prevSettingsRef = useRef({ fontSizeStep, lineSpacing, isMobile });
   useEffect(() => {
-    if (!rawFullText) return;
+    if (!rawFullText || loadingStage !== "ready") return;
     const prev = prevSettingsRef.current;
     if (
       prev.fontSizeStep === fontSizeStep &&
@@ -1287,15 +1728,26 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     prevSettingsRef.current = { fontSizeStep, lineSpacing, isMobile };
 
     const targetWords = computeTargetWordsPerPage(fontSizeStep, lineSpacing, isMobile);
-    const newPages = paginateTextIntoPages(rawFullText, targetWords);
 
-    if (pages.length > 0) {
-      const ratio = pageIndex / Math.max(1, pages.length);
-      const newIdx = Math.min(newPages.length - 1, Math.max(0, Math.floor(ratio * newPages.length)));
-      setPageIndex(newIdx);
-    }
-    setPages(newPages);
-  }, [rawFullText, fontSizeStep, lineSpacing, isMobile, pages.length, pageIndex]);
+    void (async () => {
+      setLoadingStage("paginating");
+      setLoadingMessage("Re-paginating layout for typography changes…");
+      const newPages = await paginateTextIntoPagesAsync(rawFullText, targetWords);
+      if (pages.length > 0) {
+        const ratio = pageIndex / Math.max(1, pages.length);
+        const newIdx = Math.min(newPages.length - 1, Math.max(0, Math.floor(ratio * newPages.length)));
+        setPageIndex(newIdx);
+      }
+      setPages(newPages);
+      bookTextCache.set(book.id, {
+        bookId: book.id,
+        rawText: rawFullText,
+        targetWords,
+        pages: newPages,
+      });
+      setLoadingStage("ready");
+    })();
+  }, [rawFullText, fontSizeStep, lineSpacing, isMobile, pages.length, pageIndex, loadingStage, book.id]);
 
   // Scroll to top whenever page changes
   useEffect(() => {
@@ -1324,7 +1776,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
   const leftText = pages[leftPageIndex] ?? "";
   const rightText = twoPageMode && rightPageIndex < totalPages ? (pages[rightPageIndex] ?? "") : "";
 
-  // Page-level Read-Aloud (SpeechSynthesis)
+  // SpeechSynthesis read-aloud
   function stopReadAloud() {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -1472,7 +1924,6 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageIndex, totalPages, showCheck, popover, isFlipping, twoPageMode, searchOpen]);
 
   async function triggerComprehensionCheck() {
@@ -1560,24 +2011,53 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
     });
   }
 
-  if (loadingText) {
+  // Loading indicator overlay (fetching or paginating pass)
+  if (loadingStage === "fetching" || loadingStage === "paginating") {
     return (
-      <div className="max-w-3xl mx-auto flex flex-col items-center justify-center gap-4 py-24">
-        <Loader2 size={32} className="animate-spin text-[var(--color-crimson)]" />
-        <p className="text-muted-foreground text-sm">Opening classic book from Project Gutenberg…</p>
+      <div className="max-w-xl mx-auto py-20 text-center space-y-6 glass-panel border-amber-500/20 p-8 rounded-3xl animate-in fade-in duration-300">
+        <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full border-2 border-amber-500/20 border-t-amber-400 animate-spin" />
+          <BookOpen size={28} className="text-amber-400 animate-pulse" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-white">{book.title}</h3>
+          <p className="text-xs text-amber-300 font-mono flex items-center justify-center gap-2">
+            <Loader2 size={12} className="animate-spin" />
+            {loadingMessage}
+          </p>
+        </div>
+        <p className="text-[11px] text-neutral-400 max-w-sm mx-auto">
+          Downloading full public-domain text and computing precise pagination layout…
+        </p>
       </div>
     );
   }
 
-  if (loadError) {
+  // Graceful error state with Retry button
+  if (loadingStage === "error" || loadError) {
     return (
-      <div className="max-w-3xl mx-auto py-16 text-center space-y-4">
-        <AlertCircle size={32} className="text-red-400 mx-auto" />
-        <p className="text-red-300 font-medium">Failed to load book</p>
-        <p className="text-muted-foreground text-sm">{loadError}</p>
-        <button onClick={onBack} className="btn-crimson rounded-xl px-5 py-2.5 text-sm mt-2">
-          Back to Library
-        </button>
+      <div className="max-w-xl mx-auto py-16 text-center space-y-5 glass-panel border-red-500/30 p-8 rounded-3xl animate-in fade-in duration-300">
+        <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto text-red-400">
+          <AlertCircle size={28} />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-xl font-bold text-white">Could Not Load Book</h3>
+          <p className="text-sm text-neutral-300 max-w-md mx-auto">{loadError || "An error occurred while fetching book text."}</p>
+        </div>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => void loadBookContent()}
+            className="btn-crimson px-5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-lg"
+          >
+            <RotateCcw size={14} /> Retry Loading
+          </button>
+          <button
+            onClick={onBack}
+            className="px-5 py-2.5 rounded-xl text-xs font-medium border border-white/15 text-neutral-300 hover:text-white hover:bg-white/5 transition cursor-pointer"
+          >
+            Back to Library
+          </button>
+        </div>
       </div>
     );
   }
@@ -1620,7 +2100,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             <button
               id="reading-back-btn"
               onClick={onBack}
-              className="flex items-center gap-1 text-neutral-300 hover:text-white transition px-2 py-1 rounded-lg hover:bg-white/10"
+              className="flex items-center gap-1 text-neutral-300 hover:text-white transition px-2 py-1 rounded-lg hover:bg-white/10 cursor-pointer"
             >
               <ChevronLeft size={16} /> <span className="hidden sm:inline">Library</span>
             </button>
@@ -1642,7 +2122,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 setBookmarksOpen(false);
                 setTocOpen(false);
               }}
-              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border cursor-pointer ${
                 searchOpen
                   ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                   : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
@@ -1653,7 +2133,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
               <span className="hidden sm:inline">Search</span>
             </button>
 
-            {/* Table of Contents (hidden if no chapters detected) */}
+            {/* Table of Contents */}
             {tocItems.length > 0 && (
               <button
                 id="reading-toc-btn"
@@ -1663,7 +2143,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   setBookmarksOpen(false);
                   setSearchOpen(false);
                 }}
-                className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+                className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border cursor-pointer ${
                   tocOpen
                     ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                     : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
@@ -1682,7 +2162,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             <button
               id="reading-bookmark-page-btn"
               onClick={handleToggleBookmark}
-              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border cursor-pointer ${
                 isCurrentPageBookmarked
                   ? "bg-amber-500/30 text-amber-300 border-amber-400/50"
                   : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
@@ -1708,7 +2188,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 setTocOpen(false);
                 setSearchOpen(false);
               }}
-              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border cursor-pointer ${
                 bookmarksOpen
                   ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                   : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
@@ -1730,7 +2210,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <button
                   id="reading-read-aloud-start-btn"
                   onClick={startReadAloud}
-                  className="px-2 py-1 rounded text-neutral-300 hover:text-white hover:bg-white/10 flex items-center gap-1 transition"
+                  className="px-2 py-1 rounded text-neutral-300 hover:text-white hover:bg-white/10 flex items-center gap-1 transition cursor-pointer"
                   title="Read page aloud"
                 >
                   <Volume2 size={14} className="text-amber-400" />
@@ -1740,7 +2220,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <>
                   <button
                     onClick={togglePauseReadAloud}
-                    className="px-2 py-1 rounded text-amber-300 hover:bg-white/10 flex items-center gap-1 transition"
+                    className="px-2 py-1 rounded text-amber-300 hover:bg-white/10 flex items-center gap-1 transition cursor-pointer"
                     title={isSpeakingPaused ? "Resume speech" : "Pause speech"}
                   >
                     {isSpeakingPaused ? <Play size={14} /> : <Pause size={14} />}
@@ -1748,7 +2228,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   </button>
                   <button
                     onClick={stopReadAloud}
-                    className="px-2 py-1 rounded text-red-400 hover:bg-white/10 flex items-center gap-1 transition"
+                    className="px-2 py-1 rounded text-red-400 hover:bg-white/10 flex items-center gap-1 transition cursor-pointer"
                     title="Stop speech"
                   >
                     <Square size={12} fill="currentColor" />
@@ -1761,7 +2241,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             <button
               id="reading-focus-mode-btn"
               onClick={() => setFocusMode(true)}
-              className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300 hover:text-white hover:bg-white/10 transition text-xs flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-neutral-300 hover:text-white hover:bg-white/10 transition text-xs flex items-center gap-1.5 cursor-pointer"
               title="Enter full-screen focus mode"
             >
               <Maximize2 size={14} />
@@ -1777,7 +2257,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 setTocOpen(false);
                 setSearchOpen(false);
               }}
-              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border ${
+              className={`px-2.5 py-1 rounded-lg transition text-xs flex items-center gap-1.5 border cursor-pointer ${
                 settingsOpen
                   ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                   : "bg-white/5 border-white/10 text-neutral-300 hover:text-white hover:bg-white/10"
@@ -1801,7 +2281,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             </div>
             <button
               onClick={() => setSettingsOpen(false)}
-              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -1818,7 +2298,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <button
                   key={step}
                   onClick={() => void updateAndSavePreferences({ fontSizeStep: step })}
-                  className={`py-1.5 px-3 rounded-xl border text-xs font-semibold transition ${
+                  className={`py-1.5 px-3 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                     fontSizeStep === step
                       ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow"
                       : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
@@ -1841,7 +2321,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <button
                   key={option}
                   onClick={() => void updateAndSavePreferences({ lineSpacing: option })}
-                  className={`py-1.5 px-3 rounded-xl border text-xs font-medium capitalize transition ${
+                  className={`py-1.5 px-3 rounded-xl border text-xs font-medium capitalize transition cursor-pointer ${
                     lineSpacing === option
                       ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow"
                       : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
@@ -1866,7 +2346,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   <button
                     key={key}
                     onClick={() => void updateAndSavePreferences({ themeKey: key })}
-                    className={`p-2 rounded-xl border text-xs flex items-center gap-2 transition ${
+                    className={`p-2 rounded-xl border text-xs flex items-center gap-2 transition cursor-pointer ${
                       themeKey === key
                         ? "border-amber-400 ring-2 ring-amber-400/20 shadow-md"
                         : "border-white/10 hover:border-white/30"
@@ -1892,7 +2372,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 <button
                   key={rate}
                   onClick={() => void updateAndSavePreferences({ readAloudRate: rate })}
-                  className={`py-1.5 px-2 rounded-xl border text-xs font-semibold transition ${
+                  className={`py-1.5 px-2 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                     readAloudRate === rate
                       ? "bg-amber-500/20 border-amber-400 text-amber-300 shadow"
                       : "bg-white/5 border-white/10 text-neutral-400 hover:text-white hover:bg-white/10"
@@ -1916,7 +2396,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             </div>
             <button
               onClick={() => setBookmarksOpen(false)}
-              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -1946,16 +2426,16 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                         goToPage(bm.chunk_index);
                         setBookmarksOpen(false);
                       }}
-                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs rounded-lg transition font-medium"
+                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs rounded-lg transition font-medium cursor-pointer"
                     >
                       Jump →
                     </button>
                     <button
                       onClick={() => void handleDeleteBookmark(bm.id)}
-                      className="p-1 text-neutral-400 hover:text-red-400 transition rounded-lg"
+                      className="p-1 text-neutral-400 hover:text-red-400 transition rounded-lg cursor-pointer"
                       title="Delete bookmark"
                     >
-                      <Trash2 size={14} />
+                      <X size={14} />
                     </button>
                   </div>
                 </div>
@@ -1975,7 +2455,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             </div>
             <button
               onClick={() => setTocOpen(false)}
-              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -1989,7 +2469,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   goToPage(item.pageIndex);
                   setTocOpen(false);
                 }}
-                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 text-left transition group border border-transparent hover:border-white/10"
+                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 text-left transition group border border-transparent hover:border-white/10 cursor-pointer"
               >
                 <span className="text-xs text-neutral-200 group-hover:text-amber-300 transition line-clamp-1 font-medium">
                   {item.title}
@@ -2013,7 +2493,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             </div>
             <button
               onClick={() => setSearchOpen(false)}
-              className="text-neutral-400 hover:text-white p-1 rounded-lg transition"
+              className="text-neutral-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -2031,7 +2511,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-2.5 text-neutral-400 hover:text-white text-xs"
+                className="absolute right-3 top-2.5 text-neutral-400 hover:text-white text-xs cursor-pointer"
               >
                 Clear
               </button>
@@ -2052,7 +2532,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   goToPage(res.pageIndex);
                   setSearchOpen(false);
                 }}
-                className="w-full text-left p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition flex flex-col gap-1 group"
+                className="w-full text-left p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition flex flex-col gap-1 group cursor-pointer"
               >
                 <div className="flex items-center justify-between text-[10px] text-amber-400 font-mono">
                   <span>Match #{idx + 1}</span>
@@ -2080,13 +2560,13 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           <div className="flex items-center justify-between text-xs text-neutral-400">
             <span className="label-mono text-[10px]">BOOK PROGRESS</span>
             <span id="reading-progress-label" className="label-mono text-[var(--color-gold)] text-[11px]">
-              Page {displayProgressPage} of {totalPages} ({Math.round((displayProgressPage / totalPages) * 100)}%)
+              Page {displayProgressPage} of {totalPages} ({Math.round((displayProgressPage / Math.max(1, totalPages)) * 100)}%)
             </span>
           </div>
           <div className="h-1 bg-white/10 rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-[var(--color-crimson)] via-[var(--color-gold)] to-emerald-400 transition-all duration-500"
-              style={{ width: `${(displayProgressPage / totalPages) * 100}%` }}
+              style={{ width: `${(displayProgressPage / Math.max(1, totalPages)) * 100}%` }}
             />
           </div>
         </div>
@@ -2107,7 +2587,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                 setCheckAnswered(true);
                 goToPage(pageIndex + 1);
               }}
-              className="text-xs text-neutral-400 hover:text-white transition-colors"
+              className="text-xs text-neutral-400 hover:text-white transition-colors cursor-pointer"
             >
               Skip →
             </button>
@@ -2136,7 +2616,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   setCheckAnswered(true);
                   goToPage(pageIndex + 1);
                 }}
-                className="btn-crimson rounded-xl px-4 py-2.5 text-sm w-full mt-2 font-medium"
+                className="btn-crimson rounded-xl px-4 py-2.5 text-sm w-full mt-2 font-medium cursor-pointer"
               >
                 Continue to next page →
               </button>
@@ -2256,7 +2736,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   id="reading-prev-btn"
                   onClick={() => triggerPageTurn("prev")}
                   disabled={!hasPrevPage}
-                  className="hover:opacity-100 opacity-60 flex items-center gap-1 transition disabled:opacity-20 font-medium"
+                  className="hover:opacity-100 opacity-60 flex items-center gap-1 transition disabled:opacity-20 font-medium cursor-pointer"
                 >
                   <ChevronLeft size={14} /> Previous
                 </button>
@@ -2265,19 +2745,18 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                   — {leftPageIndex + 1} —
                 </span>
 
-                {/* In single page mode show Next button here */}
                 {!effectiveTwoPageMode ? (
                   <button
                     id="reading-next-btn"
                     onClick={() => triggerPageTurn("next")}
                     disabled={!hasNextPage}
-                    className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20"
+                    className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20 cursor-pointer"
                   >
                     Next <ChevronRight size={14} />
                   </button>
                 ) : (
                   <span className="text-[10px] opacity-40 font-mono">
-                    {Math.round(((leftPageIndex + 1) / totalPages) * 100)}%
+                    {Math.round(((leftPageIndex + 1) / Math.max(1, totalPages)) * 100)}%
                   </span>
                 )}
               </div>
@@ -2371,7 +2850,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
                     id="reading-next-btn"
                     onClick={() => triggerPageTurn("next")}
                     disabled={!hasNextPage}
-                    className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20"
+                    className="hover:opacity-100 opacity-90 font-medium flex items-center gap-1 transition text-amber-600 dark:text-amber-400 disabled:opacity-20 cursor-pointer"
                   >
                     Next <ChevronRight size={14} />
                   </button>
@@ -2397,7 +2876,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           <button
             onClick={() => goToPage(Math.max(0, pageIndex - 10))}
             disabled={pageIndex <= 0}
-            className="text-neutral-400 hover:text-white disabled:opacity-30 p-1 flex items-center gap-0.5 transition"
+            className="text-neutral-400 hover:text-white disabled:opacity-30 p-1 flex items-center gap-0.5 transition cursor-pointer"
             title="Jump back 10 pages"
           >
             <ChevronsLeft size={16} /> -10
@@ -2415,7 +2894,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
           <button
             onClick={() => goToPage(Math.min(totalPages - 1, pageIndex + 10))}
             disabled={pageIndex >= totalPages - 1}
-            className="text-neutral-400 hover:text-white disabled:opacity-30 p-1 flex items-center gap-0.5 transition"
+            className="text-neutral-400 hover:text-white disabled:opacity-30 p-1 flex items-center gap-0.5 transition cursor-pointer"
             title="Jump forward 10 pages"
           >
             +10 <ChevronsRight size={16} />
@@ -2459,7 +2938,7 @@ function BookReader({ book, onBack }: { book: GutendexBook; onBack: () => void }
 }
 
 // ---------------------------------------------------------------------------
-// Comprehension quiz item (reuses same visual pattern as FullLessonModal)
+// Comprehension quiz item
 // ---------------------------------------------------------------------------
 
 function ComprehensionQuizItem({ question }: { question: ComprehensionQuestion }) {
@@ -2478,7 +2957,7 @@ function ComprehensionQuizItem({ question }: { question: ComprehensionQuestion }
               id={`comprehension-option-${i}`}
               disabled={revealed}
               onClick={() => setPicked(i)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition ${
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition cursor-pointer ${
                 revealed
                   ? isCorrect
                     ? "border-emerald-500 bg-emerald-950/30 text-emerald-200"
@@ -2552,7 +3031,7 @@ function WordPopover({
         <p className="font-bold text-base capitalize text-[var(--color-gold)]">{popover.word}</p>
         <button
           onClick={onClose}
-          className="text-neutral-500 hover:text-white transition-colors"
+          className="text-neutral-500 hover:text-white transition-colors cursor-pointer"
           aria-label="Close definition"
         >
           <X size={14} />
@@ -2582,7 +3061,7 @@ function WordPopover({
           id="add-vocab-from-reader-btn"
           onClick={onAddCard}
           disabled={isPendingCard || popover.cardAdded}
-          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition ${
+          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
             popover.cardAdded
               ? "bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 cursor-default"
               : "btn-crimson hover:shadow-[0_4px_20px_rgba(237,28,36,0.35)]"

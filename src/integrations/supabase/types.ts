@@ -501,6 +501,63 @@ export type Database = {
         }
         Relationships: []
       }
+      reading_bookmarks: {
+        Row: {
+          chunk_index: number
+          created_at: string
+          gutenberg_book_id: number
+          id: string
+          label: string
+          user_id: string
+        }
+        Insert: {
+          chunk_index: number
+          created_at?: string
+          gutenberg_book_id: number
+          id?: string
+          label: string
+          user_id: string
+        }
+        Update: {
+          chunk_index?: number
+          created_at?: string
+          gutenberg_book_id?: number
+          id?: string
+          label?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reading_preferences: {
+        Row: {
+          font_size: string | null
+          id: string
+          line_spacing: string | null
+          read_aloud_rate: number | null
+          theme: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          font_size?: string | null
+          id?: string
+          line_spacing?: string | null
+          read_aloud_rate?: number | null
+          theme?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          font_size?: string | null
+          id?: string
+          line_spacing?: string | null
+          read_aloud_rate?: number | null
+          theme?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       reading_progress: {
         Row: {
           book_title: string
